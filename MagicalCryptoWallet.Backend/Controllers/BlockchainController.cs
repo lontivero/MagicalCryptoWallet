@@ -1,12 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using MagicalCryptoWallet.Backend.Models;
 using MagicalCryptoWallet.Helpers;
+using MagicalCryptoWallet.Logging;
+using MagicalCryptoWallet.WebClients.SmartBit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NBitcoin;
+using NBitcoin.RPC;
 
 namespace MagicalCryptoWallet.Backend.Controllers
 {
@@ -17,6 +22,10 @@ namespace MagicalCryptoWallet.Backend.Controllers
 	[Route("api/v1/btc/[controller]")]
     public class BlockchainController : Controller
 	{
+		private static RPCClient RpcClient => Global.RpcClient;
+
+		private static Network Network => Global.Config.Network;
+
 		/// <summary>
 		/// Get fees for the requested confirmation targets based on Bitcoin Core's estimatesmartfee output.
 		/// </summary>
@@ -33,7 +42,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[HttpGet("fees/{confirmationTargets}")]
 		[ProducesResponseType(200)] // Note: If you add typeof(SortedDictionary<int, FeeEstimationPair>) then swagger UI will visualize incorrectly.
 		[ProducesResponseType(400)]
-		public IActionResult GetFees(string confirmationTargets)
+		public async Task<IActionResult> GetFeesAsync(string confirmationTargets)
 		{
 			if(string.IsNullOrWhiteSpace(confirmationTargets) || !ModelState.IsValid)
 			{
@@ -48,9 +57,22 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			}
 			
 			var feeEstimations = new SortedDictionary<int, FeeEstimationPair>();
-			foreach (var target in confirmationTargetsInts)
+			foreach (int target in confirmationTargetsInts)
 			{
-				feeEstimations.Add(target, new FeeEstimationPair() { Conservative = 200, Economical = 199 });
+				// ToDo: This is the most naive way to implement this.
+				// 1. Use the sanity check that under 5 satoshi per bytes should not be displayed.
+				// 2. Use the RPCResponse.Blocks output to avoid redundant RPC queries.
+				// 3. Implement caching.
+				var conservativeResponse = await RpcClient.EstimateSmartFeeAsync(target, EstimateSmartFeeMode.Conservative);
+				var economicalResponse = await RpcClient.EstimateSmartFeeAsync(target, EstimateSmartFeeMode.Economical);
+				var conservativeFee = conservativeResponse.FeeRate.FeePerK.Satoshi / 1000;
+				var economicalFee = economicalResponse.FeeRate.FeePerK.Satoshi / 1000;
+
+				// Sanity check, some miners don't mine transactions under 5 satoshi/bytes.
+				conservativeFee = Math.Max(conservativeFee, 5);
+				economicalFee = Math.Max(economicalFee, 5);
+
+				feeEstimations.Add(target, new FeeEstimationPair() { Conservative = conservativeFee, Economical = economicalFee });
 			}
 
 			return Ok(feeEstimations);
@@ -63,7 +85,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		/// Sample request:
 		///
 		///     POST /broadcast
-		///     "483045022100dbd9f153ed42e15284051183a83aa8b4574b680c17085bb94a40fdb8cdcabee00220245a9eda9bab181b336a136b243a45b32216fb16c649eae1e8a58158ecd790a4012102a03b3919772c3a6729a604765a4450df242fe41d8f27d17db722f67afad726f3"
+		///     "01000000014b6b6fced23fa0d772f83fd849ce2f4e8fa51ea49cc12710ebcdc722d74c87f5000000006a47304402206bf1118e381342d0387e47807c83d2c1e919e2e3792f2673579a9ce87a380db002207e471504f96d7830dc9cbb7442332d747a25dcfd5d1530feea92b8a302aa57f4012102a40230b345856cc18ca1d745e7ea52319a012753b050e24d7be64ca0b978fb3effffffff0235662803000000001976a9146adfacaab3dc7c51b3300c4256b184f95cc48f4288acd0dd0600000000001976a91411ff558b1790b8d57cb25b9c07094591cfd2051c88ac00000000"
 		///
 		/// </remarks>
 		/// <param name="hex">The hex string of the raw transaction.</param>
@@ -73,14 +95,38 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[HttpPost("broadcast")]
 		[ProducesResponseType(200)]
 		[ProducesResponseType(400)]
-		public IActionResult Broadcast([FromBody]string hex)
+		public async Task<IActionResult> BroadcastAsync([FromBody]string hex)
 		{
 			if(string.IsNullOrWhiteSpace(hex) || !ModelState.IsValid)
 			{
 				return BadRequest("Invalid hex.");
 			}
 
-			// ToDo: If fail return BadRequest with the RPC error details.
+			Transaction transaction;
+			try
+			{
+				transaction = new Transaction(hex);
+			}
+			catch(Exception ex)
+			{
+				Logger.LogDebug<BlockchainController>(ex);
+				return BadRequest("Invalid hex.");
+			}
+
+			try
+			{
+
+				await RpcClient.SendRawTransactionAsync(transaction);
+			}
+			catch(RPCException ex) when (ex.Message.Contains("already in block chain", StringComparison.InvariantCultureIgnoreCase))
+			{
+				return Ok("Transaction is already in the blockchain.");
+			}
+			catch(RPCException ex)
+			{
+				Logger.LogDebug<BlockchainController>(ex);
+				return BadRequest(ex.Message);
+			}
 
 			return Ok("Transaction is successfully broadcasted.");
 		}
@@ -91,16 +137,23 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		/// <returns>ExchangeRates[] contains ticker and exchange rate pairs.</returns>
 		/// <response code="200">Returns an array of exchange rates.</response>
 		[HttpGet("exchange-rates")]
-		[ProducesResponseType(typeof(IEnumerable<ExchangeRate>), 200)]		
-		public IEnumerable<ExchangeRate> GetExchangeRates()
+		[ProducesResponseType(typeof(IEnumerable<ExchangeRate>), 200)]
+		public async Task<IEnumerable<ExchangeRate>> GetExchangeRatesAsync()
 		{
-			var exchangeRates = new List<ExchangeRate>
+			// ToDo: Implement caching for instant answers.
+			// ToDo: Implement redundancy, call another API if SmartBit fails, if that fails, call another one.
+			using (var client = new SmartBitClient(Network, disposeHandler: true))
 			{
-				new ExchangeRate() { Rate = 10000m, Ticker = "USD" },
-				new ExchangeRate() { Rate = 7777.123m, Ticker = "CNY" }
-			};
+				var rates = await client.GetExchangeRatesAsync(CancellationToken.None);
+				var rate = rates.Single(x => x.Code == "USD");
 
-			return exchangeRates;
+				var exchangeRates = new List<ExchangeRate>
+				{
+					new ExchangeRate() { Rate = rate.Rate, Ticker = "USD" },
+				};
+
+				return exchangeRates;
+			}
 		}
 
 		/// <summary>
