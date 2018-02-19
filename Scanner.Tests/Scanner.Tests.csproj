@@ -5,7 +5,6 @@
 
     <IsPackable>false</IsPackable>
 
-    <StartupObject>Scanner.Tests.FilterCreationTests</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
