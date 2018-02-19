@@ -34,6 +34,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		}
 
 		private static RPCClient RpcClient => Global.RpcClient;
+		private static RestClient RestClient => Global.RestClient;
 
 		private static Network Network => Global.Config.Network;
 
@@ -240,6 +241,48 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			}
 
 			return feeResponse;
+		}
+
+		/// <summary>
+		/// Creates the Golomb-Rice filter for a given blockhash
+		/// </summary>
+		/// <remarks>
+		/// Sample request:
+		///
+		///     POST /block/00000000000000000044d076d9c43b5888551027ec70043211365301665da2e8
+		///
+		/// </remarks>
+		/// <param name="acceptedBlockHash">The latest block hash the Bitcoin Core node has accepted.</param>
+		/// <returns>An array of block hash : filter pairs.</returns>
+		/// <response code="204">The filter was created succesfully.</response>
+		/// <response code="400">The provided hash was malformed.</response>
+		/// <response code="404">If the hash is not found</response>
+		[HttpGet("block/{acceptedBlockHash}")]
+		[ProducesResponseType(204)] 
+		[ProducesResponseType(400)]
+		[ProducesResponseType(404)]
+		public IActionResult CreateFilter(string acceptedBlockHash)
+		{
+			
+			if (!ModelState.IsValid || uint256.TryParse(acceptedBlockHash, out var blockhash))
+			{
+				return BadRequest("Invalid block hash provided.");
+			}
+			
+			try{
+				var block = RestClient.GetBlock(blockhash);
+				var filter = BlockFilterBuilder.Build(block);
+				using (var filterRepository = GcsFilterRepository.Open(Global.FilterDirectory))
+				{
+					filterRepository.Put(blockhash, filter);
+				}
+			}
+			catch(Exception)
+			{
+				return NotFound();
+			}
+
+			return NoContent();
 		}
 	}
 }

@@ -26,9 +26,16 @@ namespace MagicalCryptoWallet.Backend
 			}
 		}
 
+		public static string FilterDirectory
+		{
+			get =>	Path.Combine(DataDir, "Filters");
+		}
+		
 		public static string ConfigFilePath { get; private set; }
 
 		public static RPCClient RpcClient { get; private set; }
+
+		public static RestClient RestClient { get; private set; }
 
 		public static Config Config { get; private set; }
 
