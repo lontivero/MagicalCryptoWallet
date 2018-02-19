@@ -52,7 +52,10 @@ namespace Scanner
 			    DisplayUsage();
 				Environment.Exit(BadArgumentErrorCode);
 	        }
-
+			if(blockhash == null){
+				Console.Error.WriteLine("The blockhash argument is missing. Use --blockhash");
+				Environment.Exit(InvalidBlockHashErrorCode);
+			}
 	        BuildFilter(blockhash, dataFolder, restClientEndpoint);
         }
 

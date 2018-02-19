@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Threading;
 using NBitcoin;
 using NBitcoin.Protocol;
@@ -14,8 +15,16 @@ namespace Scanner.Tests
 {
 	internal class BitcoinCoreNode : IDisposable
 	{
+		private static bool IsWindows;
+		private static bool IsUnix;
+
 		public static BitcoinCoreNode Create(string folderPath, string config)
 		{
+			var os = System.Environment.OSVersion.VersionString;
+			Console.WriteLine($"OS {os}");
+			IsWindows |= os.Contains("Windows");
+			IsUnix |= os.Contains("Unix");
+
 			var targetFolder = Directory.CreateDirectory(folderPath);
 			var templateFolder = new DirectoryInfo("./download");
 
@@ -36,31 +45,49 @@ namespace Scanner.Tests
 			if(templateFolder.Exists) return;
 			templateFolder.Create();
 
-			var zipPath = Path.Combine(Path.GetTempPath(), "bitcoin-0.16.0rc3-win64.zip");
-			if (!File.Exists(zipPath))
+			string platform="";
+			if(IsWindows){
+				platform = "bitcoin-0.16.0rc3-win64.zip";
+			}
+			else if(IsUnix){
+				platform = "bitcoin-0.16.0rc3-x86_64-linux-gnu.tar.gz";
+			}
+
+			var compressedFilePath = Path.Combine(Path.GetTempPath(), platform);
+			if (!File.Exists(compressedFilePath))
 			{
 				using (var webClient = new WebClient())
 				{
-					var url = "https://bitcoin.org/bin/bitcoin-core-0.16.0/test.rc3/bitcoin-0.16.0rc3-win64.zip";
+					var url = $"https://bitcoin.org/bin/bitcoin-core-0.16.0/test.rc3/{platform}";
+					Console.WriteLine($"Downloading from: {url}");
 
-					webClient.DownloadFile(url, zipPath);
+					webClient.DownloadFile(url, compressedFilePath);
 				}
 			}
 
-			using (var zipFile = ZipFile.Open(zipPath, ZipArchiveMode.Read))
+			var bitcoindFileName = "bitcoind" + (IsWindows ? ".exe" : "");
+			var uncompressedFilePath =Path.Combine(templateFolder.FullName, bitcoindFileName);
+
+			if(IsUnix){
+				Bash($"tar --strip-components=2 -xvzf {compressedFilePath} -C {templateFolder.FullName} bitcoin-0.16.0/bin/{bitcoindFileName}");
+			}
+			else
 			{
-				using (var compressed = zipFile.GetEntry("bitcoin-0.16.0/bin/bitcoind.exe").Open())
+				using (var zipFile = ZipFile.Open(compressedFilePath, ZipArchiveMode.Read))
 				{
-					const int BufferSize = 8 * 1024;
-					var buffer = new byte[BufferSize];
-					var readed = 0;
-					using (var uncompressed = File.Create(Path.Combine(templateFolder.FullName, "bitcoind.exe")))
+					using (var compressed = zipFile.GetEntry($"bitcoin-0.16.0/bin/{bitcoindFileName}").Open())
 					{
-						do
+						const int BufferSize = 8 * 1024;
+						var buffer = new byte[BufferSize];
+						var readed = 0;
+						using (var uncompressed = File.Create(uncompressedFilePath))
 						{
-							readed = compressed.Read(buffer, 0, BufferSize);
-							uncompressed.Write(buffer, 0, readed);
-						} while (readed > 0);
+							do
+							{
+								readed = compressed.Read(buffer, 0, BufferSize);
+								uncompressed.Write(buffer, 0, readed);
+							} while (readed > 0);
+						}
 					}
 				}
 			}
@@ -94,7 +121,8 @@ namespace Scanner.Tests
 		public void Start()
 		{
 			var folder = _folder.FullName;
-			var bitcoinCoreExe = Path.Combine(folder, "bitcoind.exe");
+			var bitcoindFileName = "bitcoind" + (IsWindows ? ".exe" : "");
+			var bitcoinCoreExe = Path.Combine(folder, bitcoindFileName);
 			var dataFolder = Path.Combine(folder, "data");
 			var configFilePath = Path.Combine(folder, "bitcoin.conf");
 
@@ -108,12 +136,18 @@ namespace Scanner.Tests
 			_config.TryAdd("rpcport", "18332");
 			_config.TryAdd("printtoconsole", "1");
 			_config.TryAdd("whitebind", "127.0.0.1:8332");
-			_config.TryAdd("datadir", "configFilePath");
 
-			var configLines = _config.Select(x=> $"{x.Key} = {x.Value}").Reverse();
+			var configLines = _config.Select(x=> $"{x.Key}={x.Value}").Reverse();
 			File.WriteAllLines(configFilePath, configLines);
 
-			_process = Process.Start(bitcoinCoreExe, $"-conf={configFilePath}");
+			var bitcoindStartInfo = new ProcessStartInfo{
+				Arguments=$"-datadir={folder} -regtest -conf={configFilePath}",
+				WorkingDirectory=folder,
+				FileName=bitcoinCoreExe,
+				CreateNoWindow=true,
+				WindowStyle=ProcessWindowStyle.Hidden
+			};
+			_process = Process.Start(bitcoindStartInfo);
 			Thread.Sleep(5);
 
 			var restClient = new RestClient(new Uri("http://127.0.0.1:18332"));
@@ -158,6 +192,12 @@ namespace Scanner.Tests
 			_process.Kill();
 			_process.WaitForExit();
 			_process.Dispose();
+		}
+
+		private static void Bash(string commandLine){
+			using(var bash = Process.Start("/bin/bash", $"-c \"{commandLine}\"")){
+				bash.WaitForExit();
+			}
 		}
 	}
 }

@@ -12,20 +12,18 @@ namespace Scanner.Tests
 {
     public class FilterCreationTests
     {
-	    public static void Main(string[] args)
-	    {
-		    Scanner.Runner.Main(args);
-	    }
-
         [Fact]
 	    public void CanGetChainInfo()
         {
-	        var scannerCommandLine = "scanner.exe --data ./data --blockhash ";
+			Console.WriteLine($"System date: {DateTimeOffset.UtcNow}");
+	        var scannerCommandLine = "curl x --blockhash %s";
 
 			using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={scannerCommandLine}"))
 		    {
 			    node.Start();
 				
+				var now = DateTimeOffset.UtcNow;
+
 			    var minerSecret = new Key().GetBitcoinSecret(node.Network);
 			    var minerAddress = minerSecret.GetAddress();
 			    var generatedBlocks = new List<Block>();
@@ -36,7 +34,8 @@ namespace Scanner.Tests
 			    for (var i = 0; i < 110; i++)
 			    {
 				    var prevBlock = curBlock;
-				    curBlock = curBlock.CreateNextBlockWithCoinbase(minerAddress, i+1);
+					var blockTime = now + TimeSpan.FromMinutes((i+1));
+				    curBlock = curBlock.CreateNextBlockWithCoinbase(minerAddress, i+1, blockTime);
 				    curBlock.Header.Bits = curBlock.Header.GetWorkRequired(node.Network, new ChainedBlock(prevBlock.Header,i+1));
 
 					if (i > 100)
