@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using NBitcoin;
+using NBitcoin.RPC;
 
 namespace MagicalCryptoWallet.Backend
 {
