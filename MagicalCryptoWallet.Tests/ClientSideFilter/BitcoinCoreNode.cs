@@ -11,7 +11,7 @@ using NBitcoin;
 using NBitcoin.Protocol;
 using NBitcoin.RPC;
 
-namespace Scanner.Tests
+namespace MagicalCryptoWallet.Tests
 {
 	internal class BitcoinCoreNode : IDisposable
 	{
@@ -132,10 +132,10 @@ namespace Scanner.Tests
 			_config.TryAdd("rest", "1");
 			_config.TryAdd("server", "1");
 			_config.TryAdd("txindex", "1");
-			_config.TryAdd("port", "8332");
-			_config.TryAdd("rpcport", "18332");
+			_config.TryAdd("port", "8555");
+			_config.TryAdd("rpcport", "18555");
 			_config.TryAdd("printtoconsole", "1");
-			_config.TryAdd("whitebind", "127.0.0.1:8332");
+			_config.TryAdd("whitebind", "127.0.0.1:8555");
 
 			var configLines = _config.Select(x=> $"{x.Key}={x.Value}").Reverse();
 			File.WriteAllLines(configFilePath, configLines);
@@ -150,7 +150,7 @@ namespace Scanner.Tests
 			_process = Process.Start(bitcoindStartInfo);
 			Thread.Sleep(5);
 
-			var restClient = new RestClient(new Uri("http://127.0.0.1:18332"));
+			var restClient = new RestClient(new Uri("http://127.0.0.1:18555"));
 			while (true)
 			{
 				try
@@ -167,7 +167,7 @@ namespace Scanner.Tests
 
 		public void BroadcastBlock(Block block)
 		{
-			using (var node = Node.Connect(Network.RegTest, "127.0.0.1:8332"))
+			using (var node = Node.Connect(Network.RegTest, "127.0.0.1:8555"))
 			{
 				node.VersionHandshake();
 				node.SendMessageAsync(new InvPayload(block));

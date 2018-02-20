@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using MagicalCryptoWallet.Backend.Models;
@@ -9,18 +8,19 @@ using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
 using MagicalCryptoWallet.WebClients;
 using MagicalCryptoWallet.WebClients.SmartBit;
-using Microsoft.AspNetCore.Http;
+using MagicalCryptoWallet.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using NBitcoin;
 using NBitcoin.RPC;
+using System.Net.Http;
 
 namespace MagicalCryptoWallet.Backend.Controllers
 {
-	/// <summary>
-	/// To interact with the Bitcoin blockchain.
-	/// </summary>
-	[Produces("application/json")]
+    /// <summary>
+    /// To interact with the Bitcoin blockchain.
+    /// </summary>
+    [Produces("application/json")]
 	[Route("api/v1/btc/[controller]")]
 	public class BlockchainController : Controller
 	{
@@ -249,7 +249,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		/// <remarks>
 		/// Sample request:
 		///
-		///     POST /block/00000000000000000044d076d9c43b5888551027ec70043211365301665da2e8
+		///     GET /block/00000000000000000044d076d9c43b5888551027ec70043211365301665da2e8
 		///
 		/// </remarks>
 		/// <param name="acceptedBlockHash">The latest block hash the Bitcoin Core node has accepted.</param>
@@ -269,7 +269,8 @@ namespace MagicalCryptoWallet.Backend.Controllers
 				return BadRequest("Invalid block hash provided.");
 			}
 			
-			try{
+			try
+			{
 				var block = RestClient.GetBlock(blockhash);
 				var filter = BlockFilterBuilder.Build(block);
 				using (var filterRepository = GcsFilterRepository.Open(Global.FilterDirectory))

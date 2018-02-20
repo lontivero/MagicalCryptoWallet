@@ -72,6 +72,7 @@ namespace MagicalCryptoWallet.Backend
 				if (string.IsNullOrWhiteSpace(blockchainInfo?.ResultString)) // should never happen
 				{
 					throw new NotSupportedException("string.IsNullOrWhiteSpace(blockchainInfo?.ResultString) == true");
+
 				}
 
 				int blocks = blockchainInfo.Result.Value<int>("blocks");
