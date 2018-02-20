@@ -73,9 +73,10 @@ namespace MagicalCryptoWallet.Backend
 				if (string.IsNullOrWhiteSpace(blockchainInfo?.ResultString)) // should never happen
 				{
 					throw new NotSupportedException("string.IsNullOrWhiteSpace(blockchainInfo?.ResultString) == true");
+
 				}
 
-				int blocks = blockchainInfo.Result.Value<int>("blocks");
+/* 				int blocks = blockchainInfo.Result.Value<int>("blocks");
 				if (blocks == 0)
 				{
 					throw new NotSupportedException("blocks == 0");
@@ -91,13 +92,12 @@ namespace MagicalCryptoWallet.Backend
 				{
 					throw new NotSupportedException("Bitcoin Core is not fully syncronized.");
 				}
-
 				Logger.LogInfo<RPCClient>("Bitcoin Core is fully syncronized.");
 
 				var estimateSmartFeeResponse = await RpcClient.TryEstimateSmartFeeAsync(2, EstimateSmartFeeMode.Conservative);
 				if (estimateSmartFeeResponse == null) throw new NotSupportedException($"Bitcoin Core cannot estimate network fees yet.");
 				Logger.LogInfo<RPCClient>("Bitcoin Core fee estimation is working.");
-
+ */
 			}
 			catch(WebException)
 			{
