@@ -55,7 +55,7 @@ namespace MagicalCryptoWallet.Backend
 
 	internal abstract class MultiStream : Stream
 	{
-		private const long MaxStreamSize = (2 * 1024 * 1024);
+		private const long MaxStreamSize = (1024 * 1024 * 1024);
 
 		private List<Stream> _streams;
 
