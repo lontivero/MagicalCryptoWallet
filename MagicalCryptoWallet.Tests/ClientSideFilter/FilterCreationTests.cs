@@ -105,6 +105,7 @@ namespace MagicalCryptoWallet.Tests
 						generatedBlocks.Add(curBlock);
 						node.BroadcastBlock(curBlock);
 					}
+					Thread.Sleep(1000);
 
 					// Verify that filters can match segwit addresses in the blocks
 					destinationIdx = 0;
