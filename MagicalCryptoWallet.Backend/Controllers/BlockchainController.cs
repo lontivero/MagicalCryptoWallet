@@ -228,7 +228,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 					});
 				}
 			}
-			catch(Exception e)
+			catch(Exception)
 			{
 				return NotFound();
 			}
@@ -288,7 +288,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 					Global.FilterRepository.Put(blockhash, filter);
 				}
 			}
-			catch(Exception e)
+			catch(Exception)
 			{
 				return NotFound();
 			}
