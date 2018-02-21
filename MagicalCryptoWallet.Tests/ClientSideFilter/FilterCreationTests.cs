@@ -54,9 +54,7 @@ namespace MagicalCryptoWallet.Tests
 			using(var server= new BackendServerMock(serverEndpoint))
 			{
 				await server.StartAsync();
-
-				Directory.Delete(Global.FilterDirectory, recursive: true);
-
+				
 				// Bitcoin Core node wiil execute a curl command every time a new block arrives
 				var notifyCmd = $"curl -v {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
 				if(BitcoinCoreNode.IsWindows)

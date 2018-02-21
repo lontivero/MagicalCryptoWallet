@@ -6,6 +6,10 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using MagicalCryptoWallet.Backend.Controllers;
 using System.Threading.Tasks;
+using NBitcoin;
+using System.IO;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace MagicalCryptoWallet.Tests
 {
@@ -20,6 +24,8 @@ namespace MagicalCryptoWallet.Tests
 
 		public async Task StartAsync()
 		{
+			DeleteFiltersDirectory();
+			await CreateConfigFileAsync();
 			await Global.InitializeAsync(false);
 
 			_host = WebHost.CreateDefaultBuilder()
@@ -28,7 +34,27 @@ namespace MagicalCryptoWallet.Tests
 					.Build();
 			_host.Start();
 		}
-		public void Dispose()
+
+        private async Task CreateConfigFileAsync()
+        {
+			var cfgPath = Path.Combine(Global.DataDir, "Config.json");
+			var cfg = new {
+				Network = "RegTest",
+				BitcoinRpcUser = "user",
+				BitcoinRpcPassword = "password",
+				RestClientEndpoint = $"http://127.0.0.1:18555/"
+			};
+
+			string jsonString = JsonConvert.SerializeObject(cfg, Formatting.Indented);
+			await File.WriteAllTextAsync(cfgPath, jsonString, Encoding.UTF8);
+		}
+
+		private void DeleteFiltersDirectory(){
+			if(Directory.Exists(Global.FilterDirectory))
+				Directory.Delete(Global.FilterDirectory, recursive: true);
+		}
+		
+        public void Dispose()
 		{
 			_host?.StopAsync().Wait();
 		}
