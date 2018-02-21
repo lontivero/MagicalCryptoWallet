@@ -45,16 +45,16 @@ namespace MagicalCryptoWallet.Tests
 		//    transactions settled in those blocks
 		// 
         [Fact]
-	    public void CreateRealFilters()
+	    public async void CreateRealFilters()
         {
 			var serverEndpoint = "http://localhost:37127";
 
 			using(var server= new BackendServerMock(serverEndpoint))
 			{
-				server.Start();
+				await server.StartAsync();
 				
 				Console.WriteLine($"System date: {DateTimeOffset.UtcNow}");
-				var scannerCommandLine = $"curl -v {serverEndpoint}/api/v1/btc/block/%s";
+				var scannerCommandLine = $"curl -v {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
 
 				using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={scannerCommandLine}"))
 				{
@@ -76,14 +76,16 @@ namespace MagicalCryptoWallet.Tests
 						curBlock = curBlock.CreateNextBlockWithCoinbase(minerAddress, i+1, blockTime);
 						curBlock.Header.Bits = curBlock.Header.GetWorkRequired(node.Network, new ChainedBlock(prevBlock.Header,i+1));
 
-						if (i > 100)
+						if (i >= 100)
 						{
 							var fundingTx = generatedBlocks[i-100].Transactions[0];
 							var amount = fundingTx.Outputs[0].Value.ToUnit(MoneyUnit.BTC);
 
 							var spending = new Transaction();
 							spending.Inputs.Add(new TxIn(new OutPoint(fundingTx, 0)));
-							spending.Outputs.Add(new TxOut(Money.Coins(5.0m), destinationKeys[destinationIdx++]));
+							var destinationKey = destinationKeys[destinationIdx++];
+							var destinationScript = PayToWitPubKeyHashTemplate.Instance.GenerateScriptPubKey(destinationKey.PubKey); 							
+							spending.Outputs.Add(new TxOut(Money.Coins(5.0m), destinationScript));
 							amount -= 5;
 							spending.Outputs.Add(new TxOut(Money.Coins(amount), minerAddress));
 
@@ -102,7 +104,20 @@ namespace MagicalCryptoWallet.Tests
 					{
 						node.BroadcastBlock(block);
 					}
-					Thread.Sleep(5000);
+
+					Thread.Sleep(1000);
+					destinationIdx = 0;
+					foreach (var block in generatedBlocks.Skip(100))
+					{
+						var key = block.Header.GetHash();
+						var filter = Global.FilterRepository.Get(key);
+						//Assert.Equal(1, filter.N); // Every block has only one witscript
+
+						var destinationKey = destinationKeys[destinationIdx++];
+						var destinationScript = PayToWitPubKeyHashTemplate.Instance.GenerateScriptPubKey(destinationKey.PubKey); 							
+						var parameter = PayToWitPubKeyHashTemplate.Instance.ExtractScriptPubKeyParameters(destinationScript);
+						Assert.True(filter.Match(parameter.ToBytes(), key.ToBytes()));
+					}
 				}
 			}
 	    }

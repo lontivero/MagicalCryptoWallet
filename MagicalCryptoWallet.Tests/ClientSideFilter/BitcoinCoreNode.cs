@@ -15,16 +15,19 @@ namespace MagicalCryptoWallet.Tests
 {
 	internal class BitcoinCoreNode : IDisposable
 	{
-		private static bool IsWindows;
-		private static bool IsUnix;
+		public static bool IsWindows;
+		public static bool IsUnix;
 
-		public static BitcoinCoreNode Create(string folderPath, string config)
+		static BitcoinCoreNode()
 		{
 			var os = System.Environment.OSVersion.VersionString;
 			Console.WriteLine($"OS {os}");
 			IsWindows |= os.Contains("Windows");
 			IsUnix |= os.Contains("Unix");
+		}
 
+		public static BitcoinCoreNode Create(string folderPath, string config)
+		{
 			var targetFolder = Directory.CreateDirectory(folderPath);
 			var templateFolder = new DirectoryInfo("./download");
 
@@ -148,7 +151,6 @@ namespace MagicalCryptoWallet.Tests
 				WindowStyle=ProcessWindowStyle.Hidden
 			};
 			_process = Process.Start(bitcoindStartInfo);
-			Thread.Sleep(5);
 
 			var restClient = new RestClient(new Uri("http://127.0.0.1:18555"));
 			while (true)
@@ -160,7 +162,6 @@ namespace MagicalCryptoWallet.Tests
 				}
 				catch
 				{
-					Thread.Sleep(5);
 				}
 			}
 		}

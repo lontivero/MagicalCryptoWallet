@@ -36,6 +36,8 @@ namespace MagicalCryptoWallet.Backend
 
 		public static RestClient RestClient { get; private set; }
 
+		public static GcsFilterRepository FilterRepository { get; private set; }
+
 		public static Config Config { get; private set; }
 
 		public async static Task InitializeAsync()
@@ -52,8 +54,8 @@ namespace MagicalCryptoWallet.Backend
 				network: Config.Network);
 			
 			RestClient = new RestClient(new Uri(Config.RestClientEndpoint));
-
-			await AssertRpcNodeFullyInitializedAsync();
+			FilterRepository = GcsFilterRepository.Open(Global.FilterDirectory);
+			//await AssertRpcNodeFullyInitializedAsync();
 		}
 
 		public static async Task InitializeConfigAsync()
@@ -76,7 +78,7 @@ namespace MagicalCryptoWallet.Backend
 
 				}
 
-/* 				int blocks = blockchainInfo.Result.Value<int>("blocks");
+ 				int blocks = blockchainInfo.Result.Value<int>("blocks");
 				if (blocks == 0)
 				{
 					throw new NotSupportedException("blocks == 0");
@@ -97,7 +99,6 @@ namespace MagicalCryptoWallet.Backend
 				var estimateSmartFeeResponse = await RpcClient.TryEstimateSmartFeeAsync(2, EstimateSmartFeeMode.Conservative);
 				if (estimateSmartFeeResponse == null) throw new NotSupportedException($"Bitcoin Core cannot estimate network fees yet.");
 				Logger.LogInfo<RPCClient>("Bitcoin Core fee estimation is working.");
- */
 			}
 			catch(WebException)
 			{

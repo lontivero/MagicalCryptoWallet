@@ -219,6 +219,7 @@ namespace MagicalCryptoWallet.Backend
 			}
 
 			_position += count;
+			_currentStream.Flush();
 		}
 
 		protected override void Dispose(bool disposing)
