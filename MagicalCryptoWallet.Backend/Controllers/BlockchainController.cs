@@ -174,20 +174,30 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[ProducesResponseType(404)]
 		public IActionResult GetFilters(string bestKnownBlockHash)
 		{
-			if (string.IsNullOrWhiteSpace(bestKnownBlockHash) || !ModelState.IsValid)
+			if (!ModelState.IsValid || !uint256.TryParse(bestKnownBlockHash, out var blockhash))
 			{
 				return BadRequest("Invalid block hash provided.");
 			}
 			
-			// if blockHash is not found, return NotFound
-			var filters = new List<string>
+			try
 			{
-				"00000000000000000019dfb706e432fa16494338a583af9ca643e4cfcf466af3IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize",
-				"000000000000000000273f2cafd24f69b72b4b694bb9ab7e4c5df17cf9486b34IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize2",
-				"0000000000000000005a1ff56e464de63be843f6f335c9a32c478c318c6d084eIamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize3"
-			};
-
-			return Ok(filters);
+				lock(Global.FilterRepository)
+				{
+					var filter =Global.FilterRepository.Get(blockhash);
+					return Ok(new{
+						N = filter.N,
+						P = filter.P,
+						Data = new {
+							Length = filter.Data.Length,
+							Bytes = filter.Data.ToByteArray()
+						}
+					});
+				}
+			}
+			catch(Exception e)
+			{
+				return NotFound();
+			}
 		}
 
 		/// <summary>
@@ -218,7 +228,8 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			
 			try
 			{
-				lock(Global.FilterRepository){
+				lock(Global.FilterRepository)
+				{
 					var block = RestClient.GetBlock(blockhash);
 					var filter = BlockFilterBuilder.Build(block);
 					Global.FilterRepository.Put(blockhash, filter);
