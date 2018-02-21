@@ -9,11 +9,12 @@ using System.Linq;
 using System.Threading.Tasks.Dataflow;
 using MagicalCryptoWallet.Backend;
 using Microsoft.AspNetCore.TestHost;
+using System.IO;
 
 namespace MagicalCryptoWallet.Tests
 {
-    public class FilterCreationTests
-    {
+	public class FilterCreationTests
+	{
 		// CreateRealFilters is an end-to-end integration tests that performs the 
 		// following tasks:
 		//
@@ -44,19 +45,25 @@ namespace MagicalCryptoWallet.Tests
 		// 7) Finally, it verifies that the filters can match the spending 
 		//    transactions settled in those blocks
 		// 
-        [Fact]
-	    public async void CreateRealFilters()
-        {
+		[Fact]
+		public async void CreateRealFilters()
+		{
 			var serverEndpoint = "http://localhost:37127";
 
+			// Host the API server
 			using(var server= new BackendServerMock(serverEndpoint))
 			{
 				await server.StartAsync();
-				
-				Console.WriteLine($"System date: {DateTimeOffset.UtcNow}");
-				var scannerCommandLine = $"curl -v {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
 
-				using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={scannerCommandLine}"))
+				Directory.Delete(Global.FilterDirectory, recursive: true);
+
+				// Bitcoin Core node wiil execute a curl command every time a new block arrives
+				var notifyCmd = $"curl -v {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
+				if(BitcoinCoreNode.IsWindows)
+					notifyCmd = $"powershell.exe \"{notifyCmd}\"";
+
+				// Downloads and configure the Bitcoin Core Node
+				using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={notifyCmd}"))
 				{
 					node.Start();
 					
@@ -98,20 +105,15 @@ namespace MagicalCryptoWallet.Tests
 						}
 						node.MineBlock(curBlock);
 						generatedBlocks.Add(curBlock);
+						node.BroadcastBlock(curBlock);
 					}
 
-					foreach (var block in generatedBlocks)
-					{
-						node.BroadcastBlock(block);
-					}
-
-					Thread.Sleep(1000);
+					// Verify that filters can match segwit addresses in the blocks
 					destinationIdx = 0;
 					foreach (var block in generatedBlocks.Skip(100))
 					{
 						var key = block.Header.GetHash();
 						var filter = Global.FilterRepository.Get(key);
-						//Assert.Equal(1, filter.N); // Every block has only one witscript
 
 						var destinationKey = destinationKeys[destinationIdx++];
 						var destinationScript = PayToWitPubKeyHashTemplate.Instance.GenerateScriptPubKey(destinationKey.PubKey); 							
@@ -120,6 +122,6 @@ namespace MagicalCryptoWallet.Tests
 					}
 				}
 			}
-	    }
-    }
+		}
+	}
 }

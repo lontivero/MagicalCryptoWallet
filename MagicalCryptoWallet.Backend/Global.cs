@@ -41,7 +41,7 @@ namespace MagicalCryptoWallet.Backend
 
 		public static Config Config { get; private set; }
 
-		public async static Task InitializeAsync()
+		public async static Task InitializeAsync(bool assertFullySynchronizedNode)
 		{
 			_dataDir = null;
 
@@ -74,7 +74,6 @@ namespace MagicalCryptoWallet.Backend
 				if (string.IsNullOrWhiteSpace(blockchainInfo?.ResultString)) // should never happen
 				{
 					throw new NotSupportedException("string.IsNullOrWhiteSpace(blockchainInfo?.ResultString) == true");
-
 				}
 
 				int blocks = blockchainInfo.Result.Value<int>("blocks");

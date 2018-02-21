@@ -20,7 +20,7 @@ namespace MagicalCryptoWallet.Tests
 
 		public async Task StartAsync()
 		{
-			await Global.InitializeAsync();
+			await Global.InitializeAsync(false);
 
 			_host = WebHost.CreateDefaultBuilder()
 					.UseStartup<Startup>()
