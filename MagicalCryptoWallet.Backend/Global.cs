@@ -40,7 +40,7 @@ namespace MagicalCryptoWallet.Backend
 
 		public static Config Config { get; private set; }
 
-		public async static Task InitializeAsync()
+		public async static Task InitializeAsync(bool assertFullySynchronizedNode)
 		{
 			_dataDir = null;
 
@@ -55,7 +55,9 @@ namespace MagicalCryptoWallet.Backend
 			
 			RestClient = new RestClient(new Uri(Config.RestClientEndpoint));
 			FilterRepository = GcsFilterRepository.Open(Global.FilterDirectory);
-			//await AssertRpcNodeFullyInitializedAsync();
+			
+			if(assertFullySynchronizedNode)
+				await AssertRpcNodeFullyInitializedAsync();
 		}
 
 		public static async Task InitializeConfigAsync()
@@ -75,7 +77,6 @@ namespace MagicalCryptoWallet.Backend
 				if (string.IsNullOrWhiteSpace(blockchainInfo?.ResultString)) // should never happen
 				{
 					throw new NotSupportedException("string.IsNullOrWhiteSpace(blockchainInfo?.ResultString) == true");
-
 				}
 
  				int blocks = blockchainInfo.Result.Value<int>("blocks");
