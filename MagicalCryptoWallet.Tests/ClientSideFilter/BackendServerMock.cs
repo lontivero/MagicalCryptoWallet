@@ -17,35 +17,34 @@ namespace MagicalCryptoWallet.Tests
 		public BackendServerMock(string endpoint){
 			_endpoint = endpoint;
 		}
-        public void Start()
+
+		public async Task StartAsync()
 		{
+			await Global.InitializeAsync();
+
 			_host = WebHost.CreateDefaultBuilder()
 					.UseStartup<Startup>()
 					.UseUrls(_endpoint)
 					.Build();
 			_host.Start();
 		}
-        public void Dispose()
-        {
-            _host?.StopAsync().Wait();
-        }
-
-	}
-
-    public class StartupMock
-    {
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddMvc();
+		public void Dispose()
+		{
+			_host?.StopAsync().Wait();
 		}
 
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
-        {
-			app.UseMvc();
-        }
 	}
 
-//	public class BackendController : BlockchainController{
-//		
-//	}
+	public class StartupMock
+	{
+		public void ConfigureServices(IServiceCollection services)
+		{
+			services.AddMvc();
+		}
+
+		public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+		{
+			app.UseMvc();
+		}
+	}
 }

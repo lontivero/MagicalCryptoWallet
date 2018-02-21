@@ -264,21 +264,20 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		public IActionResult CreateFilter(string acceptedBlockHash)
 		{
 			
-			if (!ModelState.IsValid || uint256.TryParse(acceptedBlockHash, out var blockhash))
+			if (!ModelState.IsValid || !uint256.TryParse(acceptedBlockHash, out var blockhash))
 			{
 				return BadRequest("Invalid block hash provided.");
 			}
 			
 			try
 			{
-				var block = RestClient.GetBlock(blockhash);
-				var filter = BlockFilterBuilder.Build(block);
-				using (var filterRepository = GcsFilterRepository.Open(Global.FilterDirectory))
-				{
-					filterRepository.Put(blockhash, filter);
+				lock(Global.FilterRepository){
+					var block = RestClient.GetBlock(blockhash);
+					var filter = BlockFilterBuilder.Build(block);
+					Global.FilterRepository.Put(blockhash, filter);
 				}
 			}
-			catch(Exception)
+			catch(Exception e)
 			{
 				return NotFound();
 			}

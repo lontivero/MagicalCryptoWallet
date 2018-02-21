@@ -37,6 +37,8 @@ namespace MagicalCryptoWallet.Backend
 
 		public static RestClient RestClient { get; private set; }
 
+		public static GcsFilterRepository FilterRepository { get; private set; }
+
 		public static Config Config { get; private set; }
 
 		public async static Task InitializeAsync()
