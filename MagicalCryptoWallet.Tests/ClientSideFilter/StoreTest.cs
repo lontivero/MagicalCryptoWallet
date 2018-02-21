@@ -16,18 +16,20 @@ namespace MagicalCryptoWallet.Tests
 		}
 
 		[Fact]
-		public void Test1()
+		public void BasicFilterTest()
 		{
-			var stream = new MemoryStream();
-			var filterStore = new GcsFilterStore(stream);
-			filterStore.Put(new GolombRiceFilter(new FastBitArray(), 20, 10));
-			filterStore.Put(new GolombRiceFilter(new FastBitArray(), 20, 35));
+			using (var stream = new MemoryStream())
+			{
+				var filterStore = new GcsFilterStore(stream);
+				filterStore.Put(new GolombRiceFilter(new FastBitArray(), 20, 10));
+				filterStore.Put(new GolombRiceFilter(new FastBitArray(), 20, 35));
 
-			stream.Seek(0, SeekOrigin.Begin);
-			var filters = filterStore.ToArray();
-			Assert.Equal(2, filters.Length);
-			Assert.Equal(10, filters[0].N);
-			Assert.Equal(35, filters[1].N);
+				stream.Seek(0, SeekOrigin.Begin);
+				var filters = filterStore.ToArray();
+				Assert.Equal(2, filters.Length);
+				Assert.Equal(10, filters[0].N);
+				Assert.Equal(35, filters[1].N);
+			}
 		}
 	}
 }

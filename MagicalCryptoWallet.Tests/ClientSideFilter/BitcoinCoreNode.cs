@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using NBitcoin;
 using NBitcoin.Protocol;
 using NBitcoin.RPC;
@@ -121,7 +122,7 @@ namespace MagicalCryptoWallet.Tests
 			_config = config;
 		}
 
-		public void Start()
+		public async Task StartAsync()
 		{
 			var folder = _folder.FullName;
 			var bitcoindFileName = "bitcoind" + (IsWindows ? ".exe" : "");
@@ -157,7 +158,7 @@ namespace MagicalCryptoWallet.Tests
 			{
 				try
 				{
-					var info = restClient.GetChainInfoAsync().Result;
+					var info = await restClient.GetChainInfoAsync();
 					break;
 				}
 				catch
@@ -190,9 +191,9 @@ namespace MagicalCryptoWallet.Tests
 
 		public void Dispose()
 		{
-			_process.Kill();
-			_process.WaitForExit();
-			_process.Dispose();
+			_process?.Kill();
+			_process?.WaitForExit();
+			_process?.Dispose();
 		}
 
 		private static void Bash(string commandLine){

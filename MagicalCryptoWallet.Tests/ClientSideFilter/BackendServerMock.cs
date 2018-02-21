@@ -13,7 +13,7 @@ using System.Text;
 
 namespace MagicalCryptoWallet.Tests
 {
-	public class BackendServerMock : IDisposable
+	public class BackendServerMock
 	{
 		private readonly string _endpoint = "http://localhost:37127/";
 		private IWebHost _host;
@@ -53,12 +53,11 @@ namespace MagicalCryptoWallet.Tests
 			if(Directory.Exists(Global.FilterDirectory))
 				Directory.Delete(Global.FilterDirectory, recursive: true);
 		}
-		
-        public void Dispose()
-		{
-			_host?.StopAsync().Wait();
-		}
 
+		public async Task DisposeAsync()
+		{
+			await _host?.StopAsync();
+		}
 	}
 
 	public class StartupMock

@@ -10,11 +10,19 @@ using System.Threading.Tasks.Dataflow;
 using MagicalCryptoWallet.Backend;
 using Microsoft.AspNetCore.TestHost;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace MagicalCryptoWallet.Tests
 {
-	public class FilterCreationTests
+	public class FilterCreationTests : IClassFixture<SharedFixture>
 	{
+		private SharedFixture SharedFixture { get; }
+
+		public FilterCreationTests(SharedFixture fixture)
+		{
+			SharedFixture = fixture;
+		}
+
 		// CreateRealFilters is an end-to-end integration tests that performs the 
 		// following tasks:
 		//
@@ -46,12 +54,13 @@ namespace MagicalCryptoWallet.Tests
 		//    transactions settled in those blocks
 		// 
 		[Fact]
-		public async void CreateRealFilters()
+		public async Task CreateRealFiltersAsync()
 		{
 			var serverEndpoint = "http://localhost:37127";
 
 			// Host the API server
-			using(var server= new BackendServerMock(serverEndpoint))
+			var server = new BackendServerMock(serverEndpoint);
+			try
 			{
 				await server.StartAsync();
 				
@@ -63,7 +72,7 @@ namespace MagicalCryptoWallet.Tests
 				// Downloads and configure the Bitcoin Core Node
 				using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={notifyCmd}"))
 				{
-					node.Start();
+					await node.StartAsync();
 					
 					var now = DateTimeOffset.UtcNow;
 
@@ -105,7 +114,7 @@ namespace MagicalCryptoWallet.Tests
 						generatedBlocks.Add(curBlock);
 						node.BroadcastBlock(curBlock);
 					}
-					Thread.Sleep(1000);
+					await Task.Delay(1000);
 
 					// Verify that filters can match segwit addresses in the blocks
 					destinationIdx = 0;
@@ -120,6 +129,10 @@ namespace MagicalCryptoWallet.Tests
 						Assert.True(filter.Match(parameter.ToBytes(), key.ToBytes()));
 					}
 				}
+			}
+			finally
+			{
+				await server?.DisposeAsync();
 			}
 		}
 	}
