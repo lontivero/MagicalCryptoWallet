@@ -16,7 +16,7 @@ matrix:
         - sudo apt-get -qq update && sudo apt-get install -y tor 
         - echo $(sudo killall tor)
         - tor RunAsDaemon 1
-        - docker docker pull lontivero/bitcoin-regtest
+        - docker pull lontivero/bitcoin-regtest
         - docker run -it -p 18332:18332 -p 8332:8332 bitcoin-regtest /bin/bash -c "./start-bitcoin.sh"
     - os: osx
       before_install:
@@ -24,7 +24,7 @@ matrix:
         - brew install tor; 
         - echo $(sudo killall tor)
         - tor RunAsDaemon 1
-        - docker docker pull lontivero/bitcoin-regtest
+        - docker pull lontivero/bitcoin-regtest
         - docker run -it -p 18332:18332 -p 8332:8332 bitcoin-regtest /bin/bash -c "./start-bitcoin.sh"
 
 script:
