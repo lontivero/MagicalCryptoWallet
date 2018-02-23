@@ -16,7 +16,6 @@ matrix:
         - sudo apt-get -qq update && sudo apt-get install -y tor 
         - echo $(sudo killall tor)
         - tor RunAsDaemon 1
-        - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
         - docker pull lontivero/bitcoin-regtest
         - BITCOIN_CONTAINER=$(docker run --name bitcoin-container -dit -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node")
     - os: osx
@@ -28,7 +27,6 @@ matrix:
         - brew install tor; 
         - echo $(sudo killall tor)
         - tor RunAsDaemon 1
-        - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
         - docker pull lontivero/bitcoin-regtest
         - BITCOIN_CONTAINER=$(docker run --name bitcoin-container -dit -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node")
 
