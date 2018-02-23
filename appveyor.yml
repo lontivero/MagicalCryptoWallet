@@ -14,6 +14,8 @@ install:
   - ps: $TorProcess = Start-Process tor\tor.exe -PassThru
 
 before_build:
+  - docker pull lontivero/bitcoin-regtest
+  - docker run --name bitcoin-container -dit -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node">containierid.txt
   - ps: Start-Sleep -s 5
   
 build_script:
@@ -25,3 +27,5 @@ test_script:
 
 on_finish:
   - ps: Stop-Process -Id $TorProcess.Id
+  - set /p CONTAINER_ID=< containierid.txt
+  - docker rm -f %CONTAINER_ID%

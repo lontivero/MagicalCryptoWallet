@@ -18,7 +18,7 @@ matrix:
         - tor RunAsDaemon 1
         - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
         - docker pull lontivero/bitcoin-regtest
-        - docker run -it -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node"
+        - BITCOIN_CONTAINER=$(docker run --name bitcoin-container -dit -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node")
     - os: osx
       sudo: required
       services:
@@ -30,8 +30,11 @@ matrix:
         - tor RunAsDaemon 1
         - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
         - docker pull lontivero/bitcoin-regtest
-        - docker run -it -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node"
+        - BITCOIN_CONTAINER=$(docker run --name bitcoin-container -dit -p 18332:18332 -p 8332:8332 lontivero/bitcoin-regtest /bin/bash -c "bitcoind -datadir=/home/bitcoind-regtest/node")
 
 script:
   - sleep 5
   - travis_wait dotnet test MagicalCryptoWallet.Tests/MagicalCryptoWallet.Tests.csproj
+
+after_build:
+  - docker rm -f $BITCOIN_CONTAINER
