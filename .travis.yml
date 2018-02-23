@@ -11,7 +11,7 @@ matrix:
       dist: trusty
       sudo: required
       services:
-        - docker     
+        - docker
       before_install:
         - sudo apt-get -qq update && sudo apt-get install -y tor 
         - echo $(sudo killall tor)
@@ -19,6 +19,9 @@ matrix:
         - docker pull lontivero/bitcoin-regtest
         - docker run -it -p 18332:18332 -p 8332:8332 bitcoin-regtest /bin/bash -c "./start-bitcoin.sh"
     - os: osx
+      sudo: required
+      services:
+        - docker
       before_install:
         - ulimit -S -n 4096
         - brew install tor; 
