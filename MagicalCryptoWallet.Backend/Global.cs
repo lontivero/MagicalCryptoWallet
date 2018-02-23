@@ -1,5 +1,6 @@
 ﻿using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
+using NBitcoin;
 using NBitcoin.RPC;
 using System;
 using System.Collections.Generic;
@@ -84,10 +85,16 @@ namespace MagicalCryptoWallet.Backend
 
 				Logger.LogInfo<RPCClient>("Bitcoin Core is fully synchronized.");
 
-				var estimateSmartFeeResponse = await RpcClient.TryEstimateSmartFeeAsync(2, EstimateSmartFeeMode.Conservative);
-				if (estimateSmartFeeResponse == null) throw new NotSupportedException($"Bitcoin Core cannot estimate network fees yet.");
-				Logger.LogInfo<RPCClient>("Bitcoin Core fee estimation is working.");
-
+				if(Config.Network != Network.Main){
+					Logger.LogInfo<RPCClient>("Bitcoin Core fee estimation is only available for MainNet.");
+				}
+				else
+				{
+					var estimateSmartFeeResponse = await RpcClient.TryEstimateSmartFeeAsync(2, EstimateSmartFeeMode.Economical);
+					if (estimateSmartFeeResponse == null)
+						throw new NotSupportedException($"Bitcoin Core cannot estimate network fees yet.");
+					Logger.LogInfo<RPCClient>("Bitcoin Core fee estimation is working.");
+				}
 			}
 			catch(WebException)
 			{

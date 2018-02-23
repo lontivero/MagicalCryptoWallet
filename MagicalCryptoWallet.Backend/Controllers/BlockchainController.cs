@@ -140,9 +140,14 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[ProducesResponseType(typeof(IEnumerable<ExchangeRate>), 200)]
 		public async Task<IEnumerable<ExchangeRate>> GetExchangeRatesAsync()
 		{
+			// RegTest is not supported by SmartBit so, we use testnet in case of regtest 
+			var network = Network;
+			if(Network == Network.RegTest)
+				network = Network.TestNet;
+
 			// ToDo: Implement caching for instant answers.
 			// ToDo: Implement redundancy, call another API if SmartBit fails, if that fails, call another one.
-			using (var client = new SmartBitClient(Network, disposeHandler: true))
+			using (var client = new SmartBitClient(network, disposeHandler: true))
 			{
 				var rates = await client.GetExchangeRatesAsync(CancellationToken.None);
 				var rate = rates.Single(x => x.Code == "USD");

@@ -43,7 +43,7 @@ namespace MagicalCryptoWallet.Backend
 		{
 			if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException(nameof(path));
 
-			Network = Network.Main;
+			Network = Network.RegTest;
 			BitcoinRpcUser = "user";
 			BitcoinRpcPassword = "password";
 
