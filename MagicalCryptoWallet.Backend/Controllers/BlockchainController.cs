@@ -229,7 +229,11 @@ namespace MagicalCryptoWallet.Backend.Controllers
 
 			var cacheKey = $"{nameof(GetEstimateSmartFeeAsync)}_{target}_{Enum.GetName(typeof(EstimateSmartFeeMode), mode)}";
 
+<<<<<<< HEAD
 			if (!_cache.TryGetValue(cacheKey, out feeResponse))
+=======
+			if (!_cache.TryGetValue(cacheKey, out fee))
+>>>>>>> Add RPC call caching
 			{
 				feeResponse = await RpcClient.EstimateSmartFeeAsync(target, mode);
 
