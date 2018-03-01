@@ -24,6 +24,9 @@ namespace MagicalCryptoWallet.Backend
 		[JsonProperty(PropertyName = "BitcoinRpcPassword")]
 		public string BitcoinRpcPassword { get; private set; }
 
+		[JsonProperty(PropertyName = "RestClientEndpoint")]
+		public string RestClientEndpoint { get; private set; }
+
 		public Config()
 		{
 
@@ -46,6 +49,7 @@ namespace MagicalCryptoWallet.Backend
 			Network = Network.Main;
 			BitcoinRpcUser = "user";
 			BitcoinRpcPassword = "password";
+			RestClientEndpoint = $"http://127.0.0.1:{Network.RPCPort}/";
 
 			if (!File.Exists(path))
 			{
@@ -59,6 +63,7 @@ namespace MagicalCryptoWallet.Backend
 				Network = config.Network ?? Network;
 				BitcoinRpcUser = config.BitcoinRpcUser ?? BitcoinRpcUser;
 				BitcoinRpcPassword = config.BitcoinRpcPassword ?? BitcoinRpcPassword;
+				RestClientEndpoint = config.RestClientEndpoint ?? RestClientEndpoint;
 			}
 
 			await ToFileAsync(path);

@@ -1,27 +1,37 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using MagicalCryptoWallet.Backend.Models;
 using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
+using MagicalCryptoWallet.WebClients;
 using MagicalCryptoWallet.WebClients.SmartBit;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using NBitcoin;
 using NBitcoin.RPC;
+using System.Net.Http;
 
 namespace MagicalCryptoWallet.Backend.Controllers
 {
-	/// <summary>
-	/// To interact with the Bitcoin blockchain.
-	/// </summary>
-	[Produces("application/json")]
+    /// <summary>
+    /// To interact with the Bitcoin blockchain.
+    /// </summary>
+    [Produces("application/json")]
 	[Route("api/v1/btc/[controller]")]
-    public class BlockchainController : Controller
+	public class BlockchainController : Controller
 	{
+		private readonly IMemoryCache _cache;
+		private readonly IExchangeRateProvider _exchangeRateProvider;
+
+		public BlockchainController(IMemoryCache memoryCache, IExchangeRateProvider exchangeRateProvider)
+		{
+			_cache = memoryCache;
+			_exchangeRateProvider = exchangeRateProvider;
+		}
+
 		private static RPCClient RpcClient => Global.RpcClient;
 
 		private static Network Network => Global.Config.Network;
@@ -42,6 +52,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[HttpGet("fees/{confirmationTargets}")]
 		[ProducesResponseType(200)] // Note: If you add typeof(SortedDictionary<int, FeeEstimationPair>) then swagger UI will visualize incorrectly.
 		[ProducesResponseType(400)]
+		[ResponseCache(Duration = 60, Location=ResponseCacheLocation.Client)]
 		public async Task<IActionResult> GetFeesAsync(string confirmationTargets)
 		{
 			if(string.IsNullOrWhiteSpace(confirmationTargets) || !ModelState.IsValid)
@@ -49,30 +60,45 @@ namespace MagicalCryptoWallet.Backend.Controllers
 				return BadRequest($"Invalid {nameof(confirmationTargets)} are specified.");
 			}
 
-			var confirmationTargetsInts = Array.ConvertAll(confirmationTargets.Split(',', StringSplitOptions.RemoveEmptyEntries), x => int.Parse(x));					
-
-			if (confirmationTargetsInts.Any(x => x < 2 || x > 1008))
+			var confirmationTargetsInts = new HashSet<int>();
+			foreach(var targetParam in confirmationTargets.Split(',', StringSplitOptions.RemoveEmptyEntries))
 			{
-				return BadRequest("All requested confirmation target must be >=2 AND <= 1008.");
+				if(int.TryParse(targetParam, out var target))
+				{
+					if(target < 2 || target > 1008)
+						return BadRequest("All requested confirmation target must be >=2 AND <= 1008.");
+
+					if(confirmationTargetsInts.Contains(target)) 
+						continue;
+					confirmationTargetsInts.Add(target);
+				}
 			}
-			
+
 			var feeEstimations = new SortedDictionary<int, FeeEstimationPair>();
+
 			foreach (int target in confirmationTargetsInts)
 			{
-				// ToDo: This is the most naive way to implement this.
-				// 1. Use the sanity check that under 5 satoshi per bytes should not be displayed.
-				// 2. Use the RPCResponse.Blocks output to avoid redundant RPC queries.
-				// 3. Implement caching.
-				var conservativeResponse = await RpcClient.EstimateSmartFeeAsync(target, EstimateSmartFeeMode.Conservative);
-				var economicalResponse = await RpcClient.EstimateSmartFeeAsync(target, EstimateSmartFeeMode.Economical);
-				var conservativeFee = conservativeResponse.FeeRate.FeePerK.Satoshi / 1000;
-				var economicalFee = economicalResponse.FeeRate.FeePerK.Satoshi / 1000;
+				if (Network != Network.RegTest)
+				{
+					// ToDo: This is the most naive way to implement this.
+					// 1. Use the sanity check that under 5 satoshi per bytes should not be displayed.
+					// 2. Use the RPCResponse.Blocks output to avoid redundant RPC queries.
+					// 3. Implement caching.
+					var conservativeResponse = await GetEstimateSmartFeeAsync(target, EstimateSmartFeeMode.Conservative);
+					var economicalResponse = await GetEstimateSmartFeeAsync(target, EstimateSmartFeeMode.Economical);
+					var conservativeFee = conservativeResponse.FeeRate.FeePerK.Satoshi / 1000;
+					var economicalFee = economicalResponse.FeeRate.FeePerK.Satoshi / 1000;
 
-				// Sanity check, some miners don't mine transactions under 5 satoshi/bytes.
-				conservativeFee = Math.Max(conservativeFee, 5);
-				economicalFee = Math.Max(economicalFee, 5);
+					// Sanity check, some miners don't mine transactions under 5 satoshi/bytes.
+					conservativeFee = Math.Max(conservativeFee, 5);
+					economicalFee = Math.Max(economicalFee, 5);
 
-				feeEstimations.Add(target, new FeeEstimationPair() { Conservative = conservativeFee, Economical = economicalFee });
+					feeEstimations.Add(target, new FeeEstimationPair() { Conservative = conservativeFee, Economical = economicalFee });
+				}
+				else // RegTest cannot estimate fees, so fill up with dummy data
+				{
+					feeEstimations.Add(target, new FeeEstimationPair() { Conservative = 6 + target, Economical = 5 + target });
+				}
 			}
 
 			return Ok(feeEstimations);
@@ -138,22 +164,26 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		/// <response code="200">Returns an array of exchange rates.</response>
 		[HttpGet("exchange-rates")]
 		[ProducesResponseType(typeof(IEnumerable<ExchangeRate>), 200)]
+		[ResponseCache(Duration = 60, Location=ResponseCacheLocation.Client)]
 		public async Task<IEnumerable<ExchangeRate>> GetExchangeRatesAsync()
 		{
-			// ToDo: Implement caching for instant answers.
-			// ToDo: Implement redundancy, call another API if SmartBit fails, if that fails, call another one.
-			using (var client = new SmartBitClient(Network, disposeHandler: true))
+			List<ExchangeRate> exchangeRates;
+
+			if (!_cache.TryGetValue(nameof(GetExchangeRatesAsync), out exchangeRates))
 			{
-				var rates = await client.GetExchangeRatesAsync(CancellationToken.None);
-				var rate = rates.Single(x => x.Code == "USD");
+				exchangeRates = await _exchangeRateProvider.GetExchangeRateAsync();
 
-				var exchangeRates = new List<ExchangeRate>
-				{
-					new ExchangeRate() { Rate = rate.Rate, Ticker = "USD" },
-				};
+				if(exchangeRates == null){
+					throw new HttpRequestException("BTC/USD exchange rate is not available.");
+				}
 
-				return exchangeRates;
+				var cacheEntryOptions = new MemoryCacheEntryOptions()
+					.SetAbsoluteExpiration(TimeSpan.FromSeconds(20));
+
+				_cache.Set(nameof(GetExchangeRatesAsync), exchangeRates, cacheEntryOptions);
 			}
+
+			return exchangeRates;
 		}
 
 		/// <summary>
@@ -176,20 +206,92 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[ProducesResponseType(404)]
 		public IActionResult GetFilters(string bestKnownBlockHash)
 		{
-			if (string.IsNullOrWhiteSpace(bestKnownBlockHash) || !ModelState.IsValid)
+			if (!ModelState.IsValid || !uint256.TryParse(bestKnownBlockHash, out var blockhash))
 			{
 				return BadRequest("Invalid block hash provided.");
 			}
 			
-			// if blockHash is not found, return NotFound
-			var filters = new List<string>
+			try
 			{
-				"00000000000000000019dfb706e432fa16494338a583af9ca643e4cfcf466af3IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize",
-				"000000000000000000273f2cafd24f69b72b4b694bb9ab7e4c5df17cf9486b34IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize2",
-				"0000000000000000005a1ff56e464de63be843f6f335c9a32c478c318c6d084eIamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize3"
-			};
+				lock(Global.FilterRepository)
+				{
+					var filter =Global.FilterRepository.Get(blockhash);
+					return Ok(new{
+						N = filter.N,
+						P = filter.P,
+						Data = new {
+							Length = filter.Data.Length,
+							Bytes = filter.Data.ToByteArray()
+						}
+					});
+				}
+			}
+			catch(Exception)
+			{
+				return NotFound();
+			}
+		}
 
-			return Ok(filters);
+		private async Task<EstimateSmartFeeResponse> GetEstimateSmartFeeAsync(int target, EstimateSmartFeeMode mode)
+		{
+			EstimateSmartFeeResponse feeResponse=null;
+
+			var cacheKey = $"{nameof(GetEstimateSmartFeeAsync)}_{target}_{Enum.GetName(typeof(EstimateSmartFeeMode), mode)}";
+
+			if (!_cache.TryGetValue(cacheKey, out feeResponse))
+			{
+				feeResponse = await RpcClient.EstimateSmartFeeAsync(target, mode);
+
+				var cacheEntryOptions = new MemoryCacheEntryOptions()
+					.SetAbsoluteExpiration(TimeSpan.FromSeconds(20));
+
+				_cache.Set(cacheKey, feeResponse, cacheEntryOptions);
+			}
+
+			return feeResponse;
+		}
+
+		/// <summary>
+		/// Creates the Golomb-Rice filter for a given blockhash
+		/// </summary>
+		/// <remarks>
+		/// Sample request:
+		///
+		///     GET /block/00000000000000000044d076d9c43b5888551027ec70043211365301665da2e8
+		///
+		/// </remarks>
+		/// <param name="acceptedBlockHash">The latest block hash the Bitcoin Core node has accepted.</param>
+		/// <returns>An array of block hash : filter pairs.</returns>
+		/// <response code="204">The filter was created succesfully.</response>
+		/// <response code="400">The provided hash was malformed.</response>
+		/// <response code="404">If the hash is not found</response>
+		[HttpGet("block/{acceptedBlockHash}")]
+		[ProducesResponseType(204)] 
+		[ProducesResponseType(400)]
+		[ProducesResponseType(404)]
+		public IActionResult CreateFilter(string acceptedBlockHash)
+		{
+			
+			if (!ModelState.IsValid || !uint256.TryParse(acceptedBlockHash, out var blockhash))
+			{
+				return BadRequest("Invalid block hash provided.");
+			}
+			
+			try
+			{
+				lock(Global.FilterRepository)
+				{
+					var block = RpcClient.GetBlock(blockhash);
+					var filter = BlockFilterBuilder.Build(block);
+					Global.FilterRepository.Put(blockhash, filter);
+				}
+			}
+			catch(Exception)
+			{
+				return NotFound();
+			}
+
+			return NoContent();
 		}
 	}
 }

@@ -1,14 +1,16 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using NBitcoin;
+using NBitcoin.RPC;
 
 namespace MagicalCryptoWallet.Backend
 {
-	public class BlockFilterBuilder
+	public static class BlockFilterBuilder
 	{
 		private const int P = 20;
 		private static readonly PayToWitPubKeyHashTemplate P2wpkh = PayToWitPubKeyHashTemplate.Instance;
 
-		public GolombRiceFilter Build(Block block)
+		public static GolombRiceFilter Build(Block block)
 		{
 			var key = block.GetHash().ToBytes();
 

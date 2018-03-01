@@ -55,7 +55,7 @@ namespace MagicalCryptoWallet.Backend
 
 	internal abstract class MultiStream : Stream
 	{
-		private const long MaxStreamSize = (2 * 1024 * 1024);
+		private const long MaxStreamSize = (1024 * 1024 * 1024);
 
 		private List<Stream> _streams;
 
@@ -219,6 +219,7 @@ namespace MagicalCryptoWallet.Backend
 			}
 
 			_position += count;
+			_currentStream.Flush();
 		}
 
 		protected override void Dispose(bool disposing)
