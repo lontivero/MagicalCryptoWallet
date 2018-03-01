@@ -103,8 +103,7 @@ namespace MagicalCryptoWallet.Tests
 		private static void CreateBitcoinNodeFolder(DirectoryInfo templateFolder, DirectoryInfo targetFolder)
 		{
 			var targetFolderPath = targetFolder.FullName;
-			if (targetFolder.Exists)
-				targetFolder.Delete(true);
+			DeleteFolder(targetFolderPath);
 			Directory.CreateDirectory(targetFolderPath);
 
 			foreach (var file in templateFolder.GetFiles())
@@ -198,8 +197,18 @@ namespace MagicalCryptoWallet.Tests
 			_process?.WaitForExit();
 			_process?.Dispose();
 
-			if (_folder.Exists)
-				_folder.Delete(true);
+			DeleteFolder(_folder.FullName);
+		}
+
+		private static void DeleteFolder(string folderPath)
+		{
+			try
+			{
+				Directory.Delete(folderPath, true);
+			}
+			catch{
+				// ignore
+			}
 		}
 
 		private static void Bash(string commandLine){
