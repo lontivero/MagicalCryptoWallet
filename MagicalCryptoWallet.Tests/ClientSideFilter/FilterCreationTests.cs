@@ -8,7 +8,6 @@ using System;
 using System.Linq;
 using System.Threading.Tasks.Dataflow;
 using MagicalCryptoWallet.Backend;
-using Microsoft.AspNetCore.TestHost;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -58,22 +57,25 @@ namespace MagicalCryptoWallet.Tests
 		{
 			var serverEndpoint = "http://localhost:37127";
 
-			// Host the API server
-			var server = new BackendServerMock(serverEndpoint);
-			try
-			{
-				await server.StartAsync();
-				
-				// Bitcoin Core node wiil execute a curl command every time a new block arrives
-				var notifyCmd = $"curl -v {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
-				if(BitcoinCoreNode.IsWindows)
-					notifyCmd = $"powershell.exe \"{notifyCmd}\"";
+			// Bitcoin Core node wiil execute a curl command every time a new block arrives
+			var notifyCmd = $"curl -vvv {serverEndpoint}/api/v1/btc/Blockchain/block/%s";
+			if(BitcoinCoreNode.IsWindows)
+				notifyCmd = $"powershell.exe \"{notifyCmd}\"";
 
-				// Downloads and configure the Bitcoin Core Node
-				using (var node = BitcoinCoreNode.Create("./node-1", $"blocknotify={notifyCmd}"))
+			// Downloads and configure the Bitcoin Core Node
+			var nodeFolder = Path.Combine(SharedFixture.DataDir, "node-1");
+			using (var node = BitcoinCoreNode.Create(nodeFolder, $"blocknotify={notifyCmd}"))
+			{
+				await node.StartAsync();
+
+				// Host the API server
+				var server = new BackendServerMock(serverEndpoint);
+
+				try
 				{
-					await node.StartAsync();
-					
+					await server.StartAsync();
+					await Task.Delay(5000);
+									
 					var now = DateTimeOffset.UtcNow;
 
 					var minerSecret = new Key().GetBitcoinSecret(node.Network);
@@ -128,11 +130,12 @@ namespace MagicalCryptoWallet.Tests
 						var parameter = PayToWitPubKeyHashTemplate.Instance.ExtractScriptPubKeyParameters(destinationScript);
 						Assert.True(filter.Match(parameter.ToBytes(), key.ToBytes()));
 					}
+					
 				}
-			}
-			finally
-			{
-				await server?.DisposeAsync();
+				finally
+				{
+					await server?.DisposeAsync();
+				}
 			}
 		}
 	}

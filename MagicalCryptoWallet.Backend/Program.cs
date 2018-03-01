@@ -22,7 +22,7 @@ namespace MagicalCryptoWallet.Backend
 				Logger.SetMinimumLevel(LogLevel.Info);
 				Logger.SetModes(LogMode.Debug, LogMode.Console, LogMode.File);
 
-				await Global.InitializeAsync(true);
+				await Global.InitializeAsync();
 
 				var endPoint = "http://localhost:37127/";
 

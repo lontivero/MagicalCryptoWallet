@@ -26,7 +26,7 @@ namespace MagicalCryptoWallet.Tests
 		{
 			DeleteFiltersDirectory();
 			await CreateConfigFileAsync();
-			await Global.InitializeAsync(false);
+			await Global.InitializeAsync();
 
 			_host = WebHost.CreateDefaultBuilder()
 					.UseStartup<Startup>()
@@ -42,7 +42,7 @@ namespace MagicalCryptoWallet.Tests
 				Network = "RegTest",
 				BitcoinRpcUser = "user",
 				BitcoinRpcPassword = "password",
-				RestClientEndpoint = $"http://127.0.0.1:18555/"
+				RestClientEndpoint = $"http://127.0.0.1:18443/"
 			};
 
 			string jsonString = JsonConvert.SerializeObject(cfg, Formatting.Indented);

@@ -51,10 +51,13 @@ namespace MagicalCryptoWallet.Tests
 
 			string platform="";
 			if(IsWindows){
-				platform = "bitcoin-0.16.0rc3-win64.zip";
+				platform = "bitcoin-0.16.0-win64.zip";
 			}
 			else if(IsUnix){
-				platform = "bitcoin-0.16.0rc3-x86_64-linux-gnu.tar.gz";
+				platform = "bitcoin-0.16.0-x86_64-linux-gnu.tar.gz";
+			}
+			else{
+				platform = "bitcoin-0.16.0-osx64.tar.gz";
 			}
 
 			var compressedFilePath = Path.Combine(Path.GetTempPath(), platform);
@@ -62,7 +65,7 @@ namespace MagicalCryptoWallet.Tests
 			{
 				using (var webClient = new WebClient())
 				{
-					var url = $"https://bitcoin.org/bin/bitcoin-core-0.16.0/test.rc3/{platform}";
+					var url = $"https://bitcoin.org/bin/bitcoin-core-0.16.0/{platform}";
 					Console.WriteLine($"Downloading from: {url}");
 
 					webClient.DownloadFile(url, compressedFilePath);
@@ -127,19 +130,19 @@ namespace MagicalCryptoWallet.Tests
 			var folder = _folder.FullName;
 			var bitcoindFileName = "bitcoind" + (IsWindows ? ".exe" : "");
 			var bitcoinCoreExe = Path.Combine(folder, bitcoindFileName);
-			var dataFolder = Path.Combine(folder, "data");
 			var configFilePath = Path.Combine(folder, "bitcoin.conf");
 
-			Directory.CreateDirectory(dataFolder);
-
 			_config.TryAdd("regtes", "1");
+			_config.TryAdd("dns", "0");
 			_config.TryAdd("rest", "1");
 			_config.TryAdd("server", "1");
 			_config.TryAdd("txindex", "1");
-			_config.TryAdd("port", "8555");
-			_config.TryAdd("rpcport", "18555");
+			_config.TryAdd("port", "8332");
+			_config.TryAdd("rpcport", "18443");
+			_config.TryAdd("rpcuser", "user");
+			_config.TryAdd("rpcpassword", "password");
 			_config.TryAdd("printtoconsole", "1");
-			_config.TryAdd("whitebind", "127.0.0.1:8555");
+			_config.TryAdd("whitebind", "127.0.0.1:8332");
 
 			var configLines = _config.Select(x=> $"{x.Key}={x.Value}").Reverse();
 			File.WriteAllLines(configFilePath, configLines);
@@ -153,7 +156,7 @@ namespace MagicalCryptoWallet.Tests
 			};
 			_process = Process.Start(bitcoindStartInfo);
 
-			var restClient = new RestClient(new Uri("http://127.0.0.1:18555"));
+			var restClient = new RestClient(new Uri("http://127.0.0.1:18443"));
 			while (true)
 			{
 				try
@@ -169,7 +172,7 @@ namespace MagicalCryptoWallet.Tests
 
 		public void BroadcastBlock(Block block)
 		{
-			using (var node = Node.Connect(Network.RegTest, "127.0.0.1:8555"))
+			using (var node = Node.Connect(Network.RegTest, "127.0.0.1:8332"))
 			{
 				node.VersionHandshake();
 				node.SendMessageAsync(new InvPayload(block));
@@ -194,6 +197,9 @@ namespace MagicalCryptoWallet.Tests
 			_process?.Kill();
 			_process?.WaitForExit();
 			_process?.Dispose();
+
+			if (_folder.Exists)
+				_folder.Delete(true);
 		}
 
 		private static void Bash(string commandLine){

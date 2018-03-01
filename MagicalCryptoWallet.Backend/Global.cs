@@ -41,7 +41,7 @@ namespace MagicalCryptoWallet.Backend
 
 		public static Config Config { get; private set; }
 
-		public async static Task InitializeAsync(bool assertFullySynchronizedNode)
+		public async static Task InitializeAsync()
 		{
 			_dataDir = null;
 
@@ -53,6 +53,8 @@ namespace MagicalCryptoWallet.Backend
 						UserPassword = new NetworkCredential(Config.BitcoinRpcUser, Config.BitcoinRpcPassword)
 					},
 					network: Config.Network);
+
+			FilterRepository = GcsFilterRepository.Open(Global.FilterDirectory);
 
 			await AssertRpcNodeFullyInitializedAsync();
 		}
@@ -103,6 +105,8 @@ namespace MagicalCryptoWallet.Backend
 				}
 				else // Make sure there's at least 101 block, if not generate it
 				{
+					return;
+					
 					if (blocks < 101)
 					{
 						var generateBlocksResponse = await RpcClient.GenerateAsync(101);

@@ -8,7 +8,6 @@ using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
 using MagicalCryptoWallet.WebClients;
 using MagicalCryptoWallet.WebClients.SmartBit;
-using MagicalCryptoWallet.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using NBitcoin;
@@ -34,7 +33,6 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		}
 
 		private static RPCClient RpcClient => Global.RpcClient;
-		private static RestClient RestClient => Global.RestClient;
 
 		private static Network Network => Global.Config.Network;
 
@@ -283,7 +281,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			{
 				lock(Global.FilterRepository)
 				{
-					var block = RestClient.GetBlock(blockhash);
+					var block = RpcClient.GetBlock(blockhash);
 					var filter = BlockFilterBuilder.Build(block);
 					Global.FilterRepository.Put(blockhash, filter);
 				}
