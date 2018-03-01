@@ -207,20 +207,30 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[ProducesResponseType(404)]
 		public IActionResult GetFilters(string bestKnownBlockHash)
 		{
-			if (string.IsNullOrWhiteSpace(bestKnownBlockHash) || !ModelState.IsValid)
+			if (!ModelState.IsValid || !uint256.TryParse(bestKnownBlockHash, out var blockhash))
 			{
 				return BadRequest("Invalid block hash provided.");
 			}
 			
-			// if blockHash is not found, return NotFound
-			var filters = new List<string>
+			try
 			{
-				"00000000000000000019dfb706e432fa16494338a583af9ca643e4cfcf466af3IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize",
-				"000000000000000000273f2cafd24f69b72b4b694bb9ab7e4c5df17cf9486b34IamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize2",
-				"0000000000000000005a1ff56e464de63be843f6f335c9a32c478c318c6d084eIamAFilterThereIsNoSeparationBecauseBlockHashIsConstantSize3"
-			};
-
-			return Ok(filters);
+				lock(Global.FilterRepository)
+				{
+					var filter =Global.FilterRepository.Get(blockhash);
+					return Ok(new{
+						N = filter.N,
+						P = filter.P,
+						Data = new {
+							Length = filter.Data.Length,
+							Bytes = filter.Data.ToByteArray()
+						}
+					});
+				}
+			}
+			catch(Exception)
+			{
+				return NotFound();
+			}
 		}
 
 		private async Task<EstimateSmartFeeResponse> GetEstimateSmartFeeAsync(int target, EstimateSmartFeeMode mode)
@@ -229,11 +239,7 @@ namespace MagicalCryptoWallet.Backend.Controllers
 
 			var cacheKey = $"{nameof(GetEstimateSmartFeeAsync)}_{target}_{Enum.GetName(typeof(EstimateSmartFeeMode), mode)}";
 
-<<<<<<< HEAD
 			if (!_cache.TryGetValue(cacheKey, out feeResponse))
-=======
-			if (!_cache.TryGetValue(cacheKey, out fee))
->>>>>>> Add RPC call caching
 			{
 				feeResponse = await RpcClient.EstimateSmartFeeAsync(target, mode);
 
@@ -244,6 +250,49 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			}
 
 			return feeResponse;
+		}
+
+		/// <summary>
+		/// Creates the Golomb-Rice filter for a given blockhash
+		/// </summary>
+		/// <remarks>
+		/// Sample request:
+		///
+		///     GET /block/00000000000000000044d076d9c43b5888551027ec70043211365301665da2e8
+		///
+		/// </remarks>
+		/// <param name="acceptedBlockHash">The latest block hash the Bitcoin Core node has accepted.</param>
+		/// <returns>An array of block hash : filter pairs.</returns>
+		/// <response code="204">The filter was created succesfully.</response>
+		/// <response code="400">The provided hash was malformed.</response>
+		/// <response code="404">If the hash is not found</response>
+		[HttpGet("block/{acceptedBlockHash}")]
+		[ProducesResponseType(204)] 
+		[ProducesResponseType(400)]
+		[ProducesResponseType(404)]
+		public IActionResult CreateFilter(string acceptedBlockHash)
+		{
+			
+			if (!ModelState.IsValid || !uint256.TryParse(acceptedBlockHash, out var blockhash))
+			{
+				return BadRequest("Invalid block hash provided.");
+			}
+			
+			try
+			{
+				lock(Global.FilterRepository)
+				{
+					var block = RpcClient.GetBlock(blockhash);
+					var filter = BlockFilterBuilder.Build(block);
+					Global.FilterRepository.Put(blockhash, filter);
+				}
+			}
+			catch(Exception)
+			{
+				return NotFound();
+			}
+
+			return NoContent();
 		}
 	}
 }
