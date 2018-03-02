@@ -1,15 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
-using System.Threading;
 using System.Threading.Tasks;
 using MagicalCryptoWallet.Backend.Models;
-using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
 using MagicalCryptoWallet.WebClients;
-using MagicalCryptoWallet.WebClients.SmartBit;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using NBitcoin;
@@ -270,21 +265,20 @@ namespace MagicalCryptoWallet.Backend.Controllers
 		[ProducesResponseType(204)] 
 		[ProducesResponseType(400)]
 		[ProducesResponseType(404)]
-		public IActionResult CreateFilter(string acceptedBlockHash)
+		public async Task<IActionResult> CreateFilter(string acceptedBlockHash)
 		{
-			
 			if (!ModelState.IsValid || !uint256.TryParse(acceptedBlockHash, out var blockhash))
 			{
 				return BadRequest("Invalid block hash provided.");
 			}
-			
+
 			try
 			{
-				var block = RpcClient.GetBlock(blockhash);
+				var block = await RpcClient.GetBlockAsync(blockhash);
 				var filter = BlockFilterBuilder.Build(block);
 				Global.FilterRepository.Put(blockhash, filter);
 			}
-			catch(Exception)
+			catch (Exception e)
 			{
 				return NotFound();
 			}

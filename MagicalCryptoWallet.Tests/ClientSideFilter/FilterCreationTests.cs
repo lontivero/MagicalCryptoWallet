@@ -1,15 +1,11 @@
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using NBitcoin;
-using NBitcoin.RPC;
 using Xunit;
 using System;
-using System.Linq;
-using System.Threading.Tasks.Dataflow;
-using MagicalCryptoWallet.Backend;
 using System.IO;
+using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using NBitcoin;
+using MagicalCryptoWallet.Backend;
 
 namespace MagicalCryptoWallet.Tests
 {
@@ -74,7 +70,6 @@ namespace MagicalCryptoWallet.Tests
 				try
 				{
 					await server.StartAsync();
-					await Task.Delay(5000);
 									
 					var now = DateTimeOffset.UtcNow;
 
@@ -115,29 +110,22 @@ namespace MagicalCryptoWallet.Tests
 						node.MineBlock(curBlock);
 						generatedBlocks.Add(curBlock);
 						node.BroadcastBlock(curBlock);
-						await Task.Delay(50);
 					}
+
+					await Task.Delay(2000);
 
 					// Verify that filters can match segwit addresses in the blocks
 					destinationIdx = 0;
 					foreach (var block in generatedBlocks.Skip(100))
 					{
-						try
-						{
-							var key = block.Header.GetHash();
-							var filter = Global.FilterRepository.Get(key);
+						var key = block.Header.GetHash();
+						var filter = Global.FilterRepository.Get(key);
 
-							var destinationKey = destinationKeys[destinationIdx++];
-							var destinationScript = PayToWitPubKeyHashTemplate.Instance.GenerateScriptPubKey(destinationKey.PubKey);
-							var parameter = PayToWitPubKeyHashTemplate.Instance.ExtractScriptPubKeyParameters(destinationScript);
-							Assert.True(filter.Match(parameter.ToBytes(), key.ToBytes()));
-						}
-						catch (Exception ex)
-						{
-
-						}
+						var destinationKey = destinationKeys[destinationIdx++];
+						var destinationScript = PayToWitPubKeyHashTemplate.Instance.GenerateScriptPubKey(destinationKey.PubKey);
+						var parameter = PayToWitPubKeyHashTemplate.Instance.ExtractScriptPubKeyParameters(destinationScript);
+						Assert.True(filter.Match(parameter.ToBytes(), key.ToBytes()));
 					}
-					
 				}
 				finally
 				{
