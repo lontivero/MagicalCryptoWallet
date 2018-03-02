@@ -4,11 +4,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using NBitcoin;
 
 namespace MagicalCryptoWallet.Backend
 {
-
 	public interface IKeyValueRandomAccessStore<TKey, TItem>
 	{
 		TItem GetFrom(int offset);
@@ -23,6 +23,8 @@ namespace MagicalCryptoWallet.Backend
 
 	public class GcsFilterRepository : IKeyValueStore<uint256, GolombRiceFilter>, IDisposable
 	{
+		private readonly ReaderWriterLockSlim _rwLock = new ReaderWriterLockSlim();
+
 		private readonly IKeyValueRandomAccessStore<uint256, GolombRiceFilter> _store;
 		private readonly IKeyValueStore<uint256, int> _index;
 
@@ -49,14 +51,30 @@ namespace MagicalCryptoWallet.Backend
 
 		public GolombRiceFilter Get(uint256 key)
 		{
-			var offset = _index.Get(key);
-			return _store.GetFrom(offset);
+			try
+			{
+				_rwLock.EnterReadLock();
+				var offset = _index.Get(key);
+				return _store.GetFrom(offset);
+			}
+			finally
+			{
+				_rwLock.ExitReadLock();
+			}
 		}
 
 		public void Put(uint256 key, GolombRiceFilter filter)
 		{
-			var pos = _store.Put(key, filter);
-			_index.Put(key, pos);
+			try
+			{
+				_rwLock.EnterWriteLock();
+				var pos = _store.Put(key, filter);
+				_index.Put(key, pos);
+			}
+			finally
+			{
+				_rwLock.ExitWriteLock();
+			}
 		}
 
 		#region IDisposable Support
