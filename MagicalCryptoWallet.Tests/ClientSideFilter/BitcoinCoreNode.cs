@@ -131,7 +131,7 @@ namespace MagicalCryptoWallet.Tests
 			var bitcoinCoreExe = Path.Combine(folder, bitcoindFileName);
 			var configFilePath = Path.Combine(folder, "bitcoin.conf");
 
-			_config.TryAdd("regtes", "1");
+			_config.TryAdd("regtest", "1");
 			_config.TryAdd("dns", "0");
 			_config.TryAdd("rest", "1");
 			_config.TryAdd("server", "1");

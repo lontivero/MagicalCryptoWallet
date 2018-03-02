@@ -8,7 +8,6 @@ using NBitcoin;
 
 namespace MagicalCryptoWallet.Backend
 {
-
 	public interface IKeyValueRandomAccessStore<TKey, TItem>
 	{
 		TItem GetFrom(int offset);
@@ -23,6 +22,8 @@ namespace MagicalCryptoWallet.Backend
 
 	public class GcsFilterRepository : IKeyValueStore<uint256, GolombRiceFilter>, IDisposable
 	{
+		private static object _syncObject = new object();
+
 		private readonly IKeyValueRandomAccessStore<uint256, GolombRiceFilter> _store;
 		private readonly IKeyValueStore<uint256, int> _index;
 
@@ -55,8 +56,11 @@ namespace MagicalCryptoWallet.Backend
 
 		public void Put(uint256 key, GolombRiceFilter filter)
 		{
-			var pos = _store.Put(key, filter);
-			_index.Put(key, pos);
+			lock (_syncObject)
+			{
+				var pos = _store.Put(key, filter);
+				_index.Put(key, pos);
+			}
 		}
 
 		#region IDisposable Support

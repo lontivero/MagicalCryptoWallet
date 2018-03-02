@@ -280,12 +280,9 @@ namespace MagicalCryptoWallet.Backend.Controllers
 			
 			try
 			{
-				lock(Global.FilterRepository)
-				{
-					var block = RpcClient.GetBlock(blockhash);
-					var filter = BlockFilterBuilder.Build(block);
-					Global.FilterRepository.Put(blockhash, filter);
-				}
+				var block = RpcClient.GetBlock(blockhash);
+				var filter = BlockFilterBuilder.Build(block);
+				Global.FilterRepository.Put(blockhash, filter);
 			}
 			catch(Exception)
 			{
