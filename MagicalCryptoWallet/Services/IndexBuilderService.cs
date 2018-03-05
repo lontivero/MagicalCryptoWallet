@@ -200,7 +200,7 @@ namespace MagicalCryptoWallet.Services
 						Block block = null;
 						try
 						{
-							block = await RpcClient.GetBlockAsync(height);
+							block = await RpcClientGetBlockAsync(height);
 						}
 						catch (RPCException) // if the block didn't come yet
 						{
@@ -334,6 +334,25 @@ namespace MagicalCryptoWallet.Services
 		public void Stop()
 		{
 			Interlocked.Exchange(ref _running, 0);
+		}
+
+		private Queue<Block> _blockCache = new Queue<Block>();
+		private async Task<Block> RpcClientGetBlockAsync(int height)
+		{
+			if(_blockCache.Count == 0)
+			{
+				var rpc = RpcClient.PrepareBatch();
+				var requests = Enumerable.Range(height, 36).Select(h => rpc.GetBlockAsync(h));
+				await rpc.SendBatchAsync();
+
+				foreach(var request in requests)
+				{
+					if(request.IsCompletedSuccessfully){
+						_blockCache.Enqueue(request.Result);
+					}
+				}
+			}
+			return _blockCache.Dequeue();
 		}
 	}
 }
