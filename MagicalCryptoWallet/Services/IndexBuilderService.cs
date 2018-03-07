@@ -6,6 +6,7 @@ using NBitcoin;
 using NBitcoin.RPC;
 using Nito.AsyncEx;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -179,58 +180,63 @@ namespace MagicalCryptoWallet.Services
 
 			Task.Run(async () =>
 			{
-				if (File.Exists(Bech32UtxoSetFilePath))
-				{
-					File.Delete(Bech32UtxoSetFilePath);
-				}
-
 				using (var indexFile = File.Open(IndexFilePath, FileMode.OpenOrCreate))
 				{
-					using (var utxoFile = File.Open(Bech32UtxoSetFilePath, FileMode.OpenOrCreate))
-					{
-						while (IsRunning)
-						{
-							try
-							{
-								// If stop was requested return.
-								if (IsRunning == false) return;
+					indexFile.Seek(0, SeekOrigin.End);
+					var lastPosition = indexFile.Position;
 
-								await ProcessAsync(indexFile, utxoFile);
-							}
-							catch (Exception ex)
-							{
-								Logger.LogDebug<IndexBuilderService>(ex);
-							}
+					while (IsRunning)
+					{
+						try
+						{
+							// If stop was requested return.
+							if (IsRunning == false) return;
+
+							await ProcessAsync(indexFile, lastPosition);
 						}
-<<<<<<< HEAD
-						
-						Bech32UtxoSetHistory.ClearActionHistory(); //reset history.
-=======
-						utxoFile.Close();
+						catch (Exception ex)
+						{
+							Logger.LogDebug<IndexBuilderService>(ex);
+						}
 					}
+					await SaveBech32UtxoAsync();
 					indexFile.Close();
 				}
 			});
 		}
 
-		private async Task ProcessAsync(FileStream indexFile, FileStream utxoFile)
+        private async Task SaveBech32UtxoAsync()
+        {
+			if (File.Exists(Bech32UtxoSetFilePath))
+			{
+				File.Delete(Bech32UtxoSetFilePath);
+			}
+
+			var utxoStr = Bech32UtxoSet.Select(entry
+				=> entry.Key.Hash + ":" + entry.Key.N + ":" + ByteHelpers.ToHex(entry.Value.ToCompressedBytes()));
+
+			await File.WriteAllLinesAsync(Bech32UtxoSetFilePath, utxoStr);
+        }
+
+        private async Task ProcessAsync(FileStream indexFile, long lastPosition)
 		{
 			int height = StartingHeight.Value;
 			uint256 prevHash = null;
+
 			using (await IndexLock.LockAsync())
 			{
 				if (Index.Count != 0)
 				{
-					height = Index.Last().BlockHeight.Value + 1;
-					prevHash = Index.Last().BlockHash;
+					var item = Index.Last(); 
+					height = item.BlockHeight.Value + 1;
+					prevHash = item.BlockHash;
 				}
 			}
->>>>>>> Reduce  Open/Close files
 
 			Block block = null;
 			try
 			{
-				block = await RpcClientGetBlockAsync(height);
+				block = await RpcClient.GetBlockAsync(height);
 			}
 			catch (RPCException) // if the block didn't come yet
 			{
@@ -253,15 +259,14 @@ namespace MagicalCryptoWallet.Services
 					}
 
 					// 2. Serialize Index. (Remove last line.)
-					var lines = File.ReadAllLines(IndexFilePath);
-					File.WriteAllLines(IndexFilePath, lines.Take(lines.Length - 1).ToArray());
+					await indexFile.FlushAsync();
+					indexFile.Position = lastPosition;
 
 					// 3. Rollback Bech32UtxoSet
 					Bech32UtxoSetHistory.Rollback(Bech32UtxoSet); // The Bech32UtxoSet MUST be recovered to its previous state.
 
 					// 4. Serialize Bech32UtxoSet.
-					await File.WriteAllLinesAsync(Bech32UtxoSetFilePath, Bech32UtxoSet
-						.Select(entry => entry.Key.Hash + ":" + entry.Key.N + ":" + ByteHelpers.ToHex(entry.Value.ToCompressedBytes())));
+					await SaveBech32UtxoAsync();
 
 					// 5. Skip the current block.
 					return;
@@ -317,6 +322,7 @@ namespace MagicalCryptoWallet.Services
 				Filter = filter
 			};
 
+			lastPosition = indexFile.Position;
 			var buff = Encoding.ASCII.GetBytes(filterModel.ToLine() + Environment.NewLine);
 			await indexFile.WriteAsync(buff, 0, buff.Length);
 
@@ -324,11 +330,9 @@ namespace MagicalCryptoWallet.Services
 			{
 				Index.Add(filterModel);
 			}
-			var utxoStr = Bech32UtxoSet.Select(entry
-				=> entry.Key.Hash + ":" + entry.Key.N + ":" + ByteHelpers.ToHex(entry.Value.ToCompressedBytes()) + Environment.NewLine);
 
-			var utxoBuff = Encoding.ASCII.GetBytes(string.Join(String.Empty, utxoStr));
-			await utxoFile.WriteAsync(utxoBuff, 0, utxoBuff.Length);
+			if(height % 10000 == 0)
+				await SaveBech32UtxoAsync();
 
 			Logger.LogInfo<IndexBuilderService>($"Created filter for block: {height}.");
 		}
@@ -363,22 +367,20 @@ namespace MagicalCryptoWallet.Services
 			Interlocked.Exchange(ref _running, 0);
 		}
 
-		private Queue<Block> _blockCache = new Queue<Block>();
+		private Dictionary<int, Task<Block>> _blockCache = new Dictionary<int, Task<Block>>();
 		private async Task<Block> RpcClientGetBlockAsync(int height)
 		{
-			if (_blockCache.Count == 0)
+			if (!_blockCache.ContainsKey(height))
 			{
+				_blockCache.Clear();
 				var rpc = RpcClient.PrepareBatch();
-				var requests = Enumerable.Range(height, 48).Select(h => rpc.GetBlockAsync(h)).ToArray();
-				await rpc.SendBatchAsync();
-
-				foreach (var request in requests)
+				foreach(var h in Enumerable.Range(height, 24))
 				{
-					var block = await request;
-					_blockCache.Enqueue(block);
+					_blockCache.Add(h, rpc.GetBlockAsync(h));
 				}
+				await rpc.SendBatchAsync();
 			}
-			return _blockCache.Dequeue();
+			return await _blockCache[height];
 		}
 	}
 }
