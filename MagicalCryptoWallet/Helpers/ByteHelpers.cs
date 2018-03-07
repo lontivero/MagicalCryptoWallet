@@ -113,17 +113,14 @@ namespace System
 
 		public static byte[] SafeSubarray(this byte[] array, int offset, int count)
 		{
-			if(array == null)
-				throw new ArgumentNullException("array");
-			if(offset < 0 || offset > array.Length)
-				throw new ArgumentOutOfRangeException("offset");
-			if(count < 0 || offset + count > array.Length)
-				throw new ArgumentOutOfRangeException("count");
+			Guard.NotNull(nameof(array), array);
+			Guard.InRangeAndNotNull(nameof(offset), offset, 0, array.Length-1);
+			Guard.InRangeAndNotNull(nameof(count), count, 0, array.Length-offset-1);  
 			if(offset == 0 && array.Length == count)
 				return array;
 			var data = new byte[count];
 			Buffer.BlockCopy(array, offset, data, 0, count);
 			return data;
-		}		
+		}
 	}
 }
