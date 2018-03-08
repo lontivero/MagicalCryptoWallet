@@ -110,5 +110,17 @@ namespace System
 
 			return bytes;
 		}
+
+		public static byte[] SafeSubarray(this byte[] array, int offset, int count)
+		{
+			Guard.NotNull(nameof(array), array);
+			Guard.InRangeAndNotNull(nameof(offset), offset, 0, array.Length-1);
+			Guard.InRangeAndNotNull(nameof(count), count, 0, array.Length-offset-1);  
+			if(offset == 0 && array.Length == count)
+				return array;
+			var data = new byte[count];
+			Buffer.BlockCopy(array, offset, data, 0, count);
+			return data;
+		}
 	}
 }
