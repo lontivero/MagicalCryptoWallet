@@ -410,6 +410,76 @@ namespace MagicalCryptoWallet.Tests
 			}
 		}
 
+
+		[Fact]
+		public async Task UtxoReorgTestAsync()
+		{			
+			await AssertFiltersInitializedAsync();
+
+			_filterReorgTestAsync_ReorgCount = 0;
+
+			var node = Fixture.BackendRegTestNode;
+			var utxoFilePath = Path.Combine(SharedFixture.DataDir, nameof(FilterDownloaderTestAsync), $"UtxoSet{Global.RpcClient.Network}.dat");
+
+			var downloader = new IndexDownloader(Global.RpcClient.Network, utxoFilePath, new Uri(Fixture.BackendEndPoint));
+			try
+			{
+				downloader.Synchronize(requestInterval: TimeSpan.FromSeconds(1));
+
+				downloader.Reorged += FilterReorgTestAsync_Downloader_Reorged;
+
+				// Test initial syncronization.
+				
+				var times = 0;
+				int filterCount;
+				while ((filterCount = downloader.GetFiltersIncluding(Network.RegTest.GenesisHash).Count()) < 102)
+				{
+					if (times > 500) // 30 sec
+					{
+						throw new TimeoutException($"{nameof(IndexDownloader)} test timed out. Needed filters: {102}, got only: {filterCount}.");
+					}
+					await Task.Delay(100);
+					times++;
+				}
+
+				var utxoLines = await File.ReadAllLinesAsync(utxoFilePath);
+				var lastUtxo  = utxoLines.Last();
+				var tip = await Global.RpcClient.GetBestBlockHashAsync();
+				var tipBlock = await Global.RpcClient.GetBlockHeaderAsync(tip);
+				Assert.Contains(tip.ToString(), utxoLines.Last());
+				Assert.Contains(tipBlock.HashPrevBlock.ToString(), utxoLines.TakeLast(2).First());
+
+				// Test syncronization after fork.
+				await Global.RpcClient.InvalidateBlockAsync(tip); // Reorg 1
+				await Global.RpcClient.InvalidateBlockAsync(tipBlock.HashPrevBlock); // Reorg 2
+				await Global.RpcClient.GenerateAsync(5);
+				await Task.Delay(4000);
+
+				utxoLines = await File.ReadAllLinesAsync(utxoFilePath);
+				Assert.DoesNotContain(tip.ToString(), utxoLines);
+				Assert.DoesNotContain(tipBlock.HashPrevBlock.ToString(), utxoLines);
+
+				tip = await Global.RpcClient.GetBestBlockHashAsync();
+				var blockHash = tip;
+				for(var i = 0; i < utxoLines.Length; i++)
+				{
+					var block = await Global.RpcClient.GetBlockHeaderAsync(blockHash);
+					Assert.Equal(utxoLines[utxoLines.Length - i -1], blockHash.ToString());
+					blockHash = block.HashPrevBlock;
+				}
+				Assert.Equal(2, Interlocked.Read(ref _filterReorgTestAsync_ReorgCount));
+			}
+			finally
+			{
+				downloader.Reorged -= FilterReorgTestAsync_Downloader_Reorged;
+
+				if (downloader != null)
+				{
+					await downloader.StopAsync();
+				}
+			}
+		}
+
 		private long _filterReorgTestAsync_ReorgCount;
 		private void FilterReorgTestAsync_Downloader_Reorged(object sender, uint256 e)
 		{
