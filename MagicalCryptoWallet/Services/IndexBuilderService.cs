@@ -33,7 +33,7 @@ namespace MagicalCryptoWallet.Services
 			private ActionHistoryHelper _last;
 			private bool _isOn;
 
-			private void TurnOn(){
+			public void TurnOn(){
 				_isOn = true;
 			}
 
@@ -237,6 +237,7 @@ namespace MagicalCryptoWallet.Services
 
 			Task.Run(async () =>
 			{
+				var blockCount = await RpcClient.GetBlockCountAsync();
 				try
 				{
 					while (IsRunning)
@@ -255,6 +256,11 @@ namespace MagicalCryptoWallet.Services
 									height = Index.Last().BlockHeight.Value + 1;
 									prevHash = Index.Last().BlockHash;
 								}
+							}
+
+							if(blockCount - height <= 100)
+							{ 
+								UtxoSetHistory.TurnOn();
 							}
 
 							Block block = null;
