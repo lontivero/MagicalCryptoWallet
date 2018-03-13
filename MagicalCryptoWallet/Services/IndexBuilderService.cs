@@ -25,7 +25,61 @@ namespace MagicalCryptoWallet.Services
 		private AsyncLock IndexLock { get; }
 
 		private Dictionary<OutPoint, Script> Bech32UtxoSet { get; }
-		private List<ActionHistoryHelper> Bech32UtxoSetHistory { get; }
+		private UtxoSetStack UtxoSetHistory { get; }
+
+		private class UtxoSetStack
+		{
+			private List<ActionHistoryHelper> _actionsPerBlock { get; }
+			private ActionHistoryHelper _last;
+			private bool _isOn;
+
+			private void TurnOn(){
+				_isOn = true;
+			}
+
+			public UtxoSetStack()
+			{
+				_actionsPerBlock = new List<ActionHistoryHelper>(capacity:100);
+				_last = null;
+				_isOn = false;
+			}
+
+			public void PushBlockMark()
+			{
+				if(!_isOn) return;
+				if (_actionsPerBlock.Count >= 100)
+				{
+					_actionsPerBlock.RemoveFirst();
+				}
+				_last = new ActionHistoryHelper();
+				_actionsPerBlock.Add(_last);
+			}
+
+			public void Add(OutPoint outpoint, Script script)
+			{
+				if(!_isOn) return;
+				_last.StoreAction(ActionHistoryHelper.Operation.Add, outpoint, script);
+			}
+
+			public void Remove(OutPoint outpoint, Script script)
+			{
+				if(!_isOn) return;
+				_last.StoreAction(ActionHistoryHelper.Operation.Remove, outpoint, script);
+			}
+			
+			public void PopAndRollback(Dictionary<OutPoint, Script> toRollBack)
+			{
+				if(!_isOn) return;
+				_last.Rollback(toRollBack);
+				_actionsPerBlock.RemoveLast();
+				_last = _actionsPerBlock.Last();
+			}
+
+            internal bool AreThereChanges()
+            {
+                return _actionsPerBlock.Count > 0;
+            }
+        }
 
 		private class ActionHistoryHelper
 		{
@@ -128,7 +182,7 @@ namespace MagicalCryptoWallet.Services
 			Bech32UtxoSetFilePath = Guard.NotNullOrEmptyOrWhitespace(nameof(bech32UtxoSetFilePath), bech32UtxoSetFilePath);
 
 			Bech32UtxoSet = new Dictionary<OutPoint, Script>();
-			Bech32UtxoSetHistory = new List<ActionHistoryHelper>(capacity: 100);
+			UtxoSetHistory = new UtxoSetStack();
 			Index = new List<FilterModel>();
 			IndexLock = new AsyncLock();
 
@@ -233,10 +287,9 @@ namespace MagicalCryptoWallet.Services
 									File.WriteAllLines(IndexFilePath, lines.Take(lines.Length - 1).ToArray());
 
 									// 3. Rollback Bech32UtxoSet
-									if (Bech32UtxoSetHistory.Count != 0)
+									if (UtxoSetHistory.AreThereChanges())
 									{
-										Bech32UtxoSetHistory.Last().Rollback(Bech32UtxoSet); // The Bech32UtxoSet MUST be recovered to its previous state.
-										Bech32UtxoSetHistory.RemoveLast();
+										UtxoSetHistory.PopAndRollback(Bech32UtxoSet);
 
 										// 4. Serialize Bech32UtxoSet.
 										await File.WriteAllLinesAsync(Bech32UtxoSetFilePath, Bech32UtxoSet
@@ -248,11 +301,7 @@ namespace MagicalCryptoWallet.Services
 								}
 							}
 
-							if (Bech32UtxoSetHistory.Count >= 100)
-							{
-								Bech32UtxoSetHistory.RemoveFirst();
-							}
-							Bech32UtxoSetHistory.Add(new ActionHistoryHelper());
+							UtxoSetHistory.PushBlockMark();
 
 							var scripts = new HashSet<Script>();
 
@@ -265,7 +314,7 @@ namespace MagicalCryptoWallet.Services
 									{
 										var outpoint = new OutPoint(tx.GetHash(), i);
 										Bech32UtxoSet.Add(outpoint, output.ScriptPubKey);
-										Bech32UtxoSetHistory.Last().StoreAction(ActionHistoryHelper.Operation.Add, outpoint, output.ScriptPubKey);
+										UtxoSetHistory.Add(outpoint, output.ScriptPubKey);
 										scripts.Add(output.ScriptPubKey);
 									}
 								}
@@ -277,7 +326,7 @@ namespace MagicalCryptoWallet.Services
 									{
 										Script val = Bech32UtxoSet[input.PrevOut];
 										Bech32UtxoSet.Remove(input.PrevOut);
-										Bech32UtxoSetHistory.Last().StoreAction(ActionHistoryHelper.Operation.Remove, input.PrevOut, val);
+										UtxoSetHistory.Remove(input.PrevOut, val);
 										scripts.Add(found.Value);
 									}
 								}
