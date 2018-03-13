@@ -464,7 +464,7 @@ namespace MagicalCryptoWallet.Tests
 				for(var i = 0; i < utxoLines.Length; i++)
 				{
 					var block = await Global.RpcClient.GetBlockHeaderAsync(blockHash);
-					Assert.Equal(utxoLines[utxoLines.Length - i -1], blockHash.ToString());
+					Assert.Contains(blockHash.ToString(), utxoLines[utxoLines.Length - i -1]);
 					blockHash = block.HashPrevBlock;
 				}
 				Assert.Equal(2, Interlocked.Read(ref _filterReorgTestAsync_ReorgCount));
