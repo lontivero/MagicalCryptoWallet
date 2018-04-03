@@ -27,7 +27,7 @@ namespace MagicalCryptoWallet.Services
 		private List<FilterModel> Index { get; }
 		private AsyncLock IndexLock { get; }
 		
-		public static Height GetStartingHeight(Network network) => IndexBuilderService.GetStartingHeight(network);
+		public static Height GetStartingHeight(Network network) => network.GetStartingHeight();
 		public Height StartingHeight => GetStartingHeight(Network);
 
 		public event EventHandler<uint256> Reorged;

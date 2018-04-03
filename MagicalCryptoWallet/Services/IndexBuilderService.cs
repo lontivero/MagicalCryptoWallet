@@ -1,4 +1,5 @@
-﻿using MagicalCryptoWallet.Backend.Models;
+﻿using MagicalCryptoWallet.Backend;
+using MagicalCryptoWallet.Backend.Models;
 using MagicalCryptoWallet.Helpers;
 using MagicalCryptoWallet.Logging;
 using MagicalCryptoWallet.Models;
@@ -24,93 +25,7 @@ namespace MagicalCryptoWallet.Services
 		private List<FilterModel> Index { get; }
 		private AsyncLock IndexLock { get; }
 
-		private Dictionary<OutPoint, Script> Bech32UtxoSet { get; }
-		private List<ActionHistoryHelper> Bech32UtxoSetHistory { get; }
-
-		private class ActionHistoryHelper
-		{
-			public enum Operation
-			{
-				Add,
-				Remove
-			}
-
-			private List<ActionItem> ActionHistory { get; }
-
-			public ActionHistoryHelper()
-			{
-				ActionHistory = new List<ActionItem>();
-			}
-
-			public class ActionItem
-			{
-				public Operation Action { get; }
-				public OutPoint OutPoint { get; }
-				public Script Script { get; }
-
-				public ActionItem(Operation action, OutPoint outPoint, Script script)
-				{
-					Action = action;
-					OutPoint = outPoint;
-					Script = script;
-				}
-			}
-
-			public void ClearActionHistory()
-			{
-				ActionHistory.Clear();
-			}
-
-			public void StoreAction(ActionItem actionItem)
-			{
-				ActionHistory.Add(actionItem);
-			}
-			public void StoreAction(Operation action, OutPoint outpoint, Script script)
-			{
-				StoreAction(new ActionItem(action, outpoint, script));
-			}
-
-			public void Rollback(Dictionary<OutPoint, Script> toRollBack)
-			{
-				for (var i = ActionHistory.Count - 1; i >= 0; i--)
-				{
-					ActionItem act = ActionHistory[i];
-					switch (act.Action)
-					{
-						case Operation.Add:
-							toRollBack.Remove(act.OutPoint);
-							break;
-						case Operation.Remove:
-							toRollBack.Add(act.OutPoint, act.Script);
-							break;
-						default:
-							throw new ArgumentOutOfRangeException();
-					}
-				}
-				ActionHistory.Clear();
-			}
-		}
-
-		public static Height GetStartingHeight(Network network) // First possible bech32 transaction ever.
-		{
-			if (network == Network.Main)
-			{
-				return new Height(481824);
-			}
-			else if (network == Network.TestNet)
-			{
-				return new Height(828575);
-			}
-			else if (network == Network.RegTest)
-			{
-				return new Height(0);
-			}
-			else
-			{
-				throw new NotSupportedException($"{network} is not supported.");
-			}
-		}
-		public Height StartingHeight => GetStartingHeight(RpcClient.Network);
+		public Height StartingHeight => RpcClient.Network.GetStartingHeight();
 		public static FilterModel GetStartingFilter(Network network) => IndexDownloader.GetStartingFilter(network);
 		public FilterModel StartingFilter => GetStartingFilter(RpcClient.Network);
 
@@ -127,8 +42,6 @@ namespace MagicalCryptoWallet.Services
 			IndexFilePath = Guard.NotNullOrEmptyOrWhitespace(nameof(indexFilePath), indexFilePath);
 			Bech32UtxoSetFilePath = Guard.NotNullOrEmptyOrWhitespace(nameof(bech32UtxoSetFilePath), bech32UtxoSetFilePath);
 
-			Bech32UtxoSet = new Dictionary<OutPoint, Script>();
-			Bech32UtxoSetHistory = new List<ActionHistoryHelper>(capacity: 100);
 			Index = new List<FilterModel>();
 			IndexLock = new AsyncLock();
 
@@ -144,12 +57,17 @@ namespace MagicalCryptoWallet.Services
 				}
 				else
 				{
-					int height = StartingHeight.Value;
-					foreach (var line in File.ReadAllLines(IndexFilePath))
+					using(var filters = FilterRepository.Open(indexDir))
 					{
-						var filter = FilterModel.FromLine(line, new Height(height));
-						height++;
-						Index.Add(filter);
+						int height = StartingHeight.Value;
+						foreach (var filter in filters.GetAll())
+						{
+							Index.Add(new FilterModel{ 
+								Filter = filter, 
+								BlockHeight = new Height(height)}
+							);
+							height++;
+						}
 					}
 				}
 			}
@@ -162,31 +80,27 @@ namespace MagicalCryptoWallet.Services
 				{
 					File.Delete(bech32UtxoSetFilePath); // RegTest is not a global ledger, better to delete it.
 				}
-				else
-				{
-					foreach (var line in File.ReadAllLines(Bech32UtxoSetFilePath))
-					{
-						var parts = line.Split(':');
-
-						var txHash = new uint256(parts[0]);
-						var nIn = int.Parse(parts[1]);
-						var script = new Script(ByteHelpers.FromHex(parts[2]), true);
-						Bech32UtxoSet.Add(new OutPoint(txHash, nIn), script);
-					}
-				}
 			}
 		}
+
+		private static GolombRiceFilter EmptyFilter = new GolombRiceFilter(new FastBitArray(), 0);
 
 		public void Synchronize()
 		{
 			Interlocked.Exchange(ref _running, 1);
 
+			var indexDir = Path.GetDirectoryName(IndexFilePath);
+			var utxoSetDir = Path.GetDirectoryName(Bech32UtxoSetFilePath);
+
+			var filters = FilterRepository.Open(indexDir);
+			var utxos = UtxosRepository.Open(utxoSetDir);
+
 			Task.Run(async () =>
 			{
 				try
 				{
-					var blockCount = await RpcClient.GetBlockCountAsync();
-					var isIIB = true; // Initial Index Building phase
+					int height = 0;
+					uint256 prevHash = null;
 
 					while (IsRunning)
 					{
@@ -195,20 +109,15 @@ namespace MagicalCryptoWallet.Services
 							// If stop was requested return.
 							if (IsRunning == false) return;
 
-							int height = StartingHeight.Value;
-							uint256 prevHash = null;
+							height = StartingHeight.Value;
 							using (await IndexLock.LockAsync())
 							{
-								if (Index.Count != 0)
+								if(Index.Count > 0)
 								{
-									height = Index.Last().BlockHeight.Value + 1;
-									prevHash = Index.Last().BlockHash;
+									var lastFilter = Index.Last(); 
+									height = lastFilter.BlockHeight.Value + 1;
+									prevHash = lastFilter.BlockHash;
 								}
-							}
-
-							if (blockCount - height <= 100)
-							{
-								isIIB = false;
 							}
 
 							Block block = null;
@@ -222,45 +131,22 @@ namespace MagicalCryptoWallet.Services
 								continue;
 							}
 
-							if (prevHash != null)
+							// In case of reorg:
+							if (prevHash != null && prevHash != block.Header.HashPrevBlock)
 							{
-								// In case of reorg:
-								if (prevHash != block.Header.HashPrevBlock && !isIIB) // There is no reorg in IIB
+								Logger.LogInfo<IndexBuilderService>($"REORG Invalid Block: {prevHash}");
+								// 1. Rollback index
+								using (await IndexLock.LockAsync())
 								{
-									Logger.LogInfo<IndexBuilderService>($"REORG Invalid Block: {prevHash}");
-									// 1. Rollback index
-									using (await IndexLock.LockAsync())
-									{
-										Index.RemoveLast();
-									}
-
-									// 2. Serialize Index. (Remove last line.)
-									var lines = File.ReadAllLines(IndexFilePath);
-									File.WriteAllLines(IndexFilePath, lines.Take(lines.Length - 1).ToArray());
-
-									// 3. Rollback Bech32UtxoSet
-									if (Bech32UtxoSetHistory.Count != 0)
-									{
-										Bech32UtxoSetHistory.Last().Rollback(Bech32UtxoSet); // The Bech32UtxoSet MUST be recovered to its previous state.
-										Bech32UtxoSetHistory.RemoveLast();
-
-										// 4. Serialize Bech32UtxoSet.
-										await File.WriteAllLinesAsync(Bech32UtxoSetFilePath, Bech32UtxoSet
-											.Select(entry => entry.Key.Hash + ":" + entry.Key.N + ":" + ByteHelpers.ToHex(entry.Value.ToCompressedBytes())));
-									}
-
-									// 5. Skip the current block.
-									continue;
+									var lastFilter = Index.Last(); 
+									Index.RemoveAt(Index.Count - 1);
+									filters.Delete(lastFilter.BlockHash);
 								}
-							}
 
-							if (!isIIB)
-							{
-								if (Bech32UtxoSetHistory.Count >= 100)
-								{
-									Bech32UtxoSetHistory.RemoveFirst();
-								}
-								Bech32UtxoSetHistory.Add(new ActionHistoryHelper());
+								// 3. Rollback Bech32UtxoSet
+								utxos.RevertToCheckpoint();
+
+								continue;
 							}
 
 							var scripts = new HashSet<Script>();
@@ -273,27 +159,18 @@ namespace MagicalCryptoWallet.Services
 									if (!output.ScriptPubKey.IsPayToScriptHash && output.ScriptPubKey.IsWitness)
 									{
 										var outpoint = new OutPoint(tx.GetHash(), i);
-										Bech32UtxoSet.Add(outpoint, output.ScriptPubKey);
-										if (!isIIB)
-										{
-											Bech32UtxoSetHistory.Last().StoreAction(ActionHistoryHelper.Operation.Add, outpoint, output.ScriptPubKey);
-										}
+										utxos.Append(new UtxoData(outpoint, output.ScriptPubKey));
 										scripts.Add(output.ScriptPubKey);
 									}
 								}
 
 								foreach (var input in tx.Inputs)
 								{
-									var found = Bech32UtxoSet.SingleOrDefault(x => x.Key == input.PrevOut);
-									if (found.Key != default)
+									var val = utxos.Get(input.PrevOut).FirstOrDefault();
+									if (val != null)
 									{
-										Script val = Bech32UtxoSet[input.PrevOut];
-										Bech32UtxoSet.Remove(input.PrevOut);
-										if (!isIIB)
-										{
-											Bech32UtxoSetHistory.Last().StoreAction(ActionHistoryHelper.Operation.Remove, input.PrevOut, val);
-										}
-										scripts.Add(found.Value);
+										utxos.Delete(input.PrevOut);
+										scripts.Add(val.Script);
 									}
 								}
 							}
@@ -303,12 +180,10 @@ namespace MagicalCryptoWallet.Services
 							// is constructed.This ensures the key is deterministic while still varying from block to block.
 							var key = block.GetHash().ToBytes().Take(16).ToArray();
 
-							GolombRiceFilter filter = null;
-							if (scripts.Count != 0)
-							{
-								filter = GolombRiceFilter.Build(key, scripts.Select(x => x.ToCompressedBytes()));
-							}
-
+							var filter = (scripts.Count != 0)
+								? GolombRiceFilter.Build(key, scripts.Select(x => x.ToBytes()))
+								: EmptyFilter
+;
 							var filterModel = new FilterModel
 							{
 								BlockHash = block.GetHash(),
@@ -316,30 +191,17 @@ namespace MagicalCryptoWallet.Services
 								Filter = filter
 							};
 
-							await File.AppendAllLinesAsync(IndexFilePath, new[] { filterModel.ToLine() });
+							filters.Append(filterModel.BlockHash, filterModel.Filter);
+
 							using (await IndexLock.LockAsync())
 							{
 								Index.Add(filterModel);
 							}
-							if (File.Exists(Bech32UtxoSetFilePath))
-							{
-								File.Delete(Bech32UtxoSetFilePath);
-							}
-							await File.WriteAllLinesAsync(Bech32UtxoSetFilePath, Bech32UtxoSet
-								.Select(entry => entry.Key.Hash + ":" + entry.Key.N + ":" + ByteHelpers.ToHex(entry.Value.ToCompressedBytes())));
-
-							if (blockCount - height <= 3 || height % 100 == 0) // If not close to the tip, just log debug.
-							{
-								Logger.LogInfo<IndexBuilderService>($"Created filter for block: {height}.");
-							}
-							else
-							{
-								Logger.LogDebug<IndexBuilderService>($"Created filter for block: {height}.");
-							}
 						}
 						catch (Exception ex)
 						{
-							Logger.LogDebug<IndexBuilderService>(ex);
+							Logger.LogInfo<IndexBuilderService>($"Created filter for block: {height}.");
+							utxos.Checkpoint();
 						}
 					}
 				}
@@ -387,6 +249,30 @@ namespace MagicalCryptoWallet.Services
 			while (IsStopping)
 			{
 				await Task.Delay(50);
+			}
+		}
+	}
+
+	internal static class NetworkExtensions
+	{
+		// First possible bech32 transaction ever.
+		public static Height GetStartingHeight(this Network network) 
+		{
+			if (network == Network.Main)
+			{
+				return new Height(481824);
+			}
+			else if (network == Network.TestNet)
+			{
+				return new Height(828575);
+			}
+			else if (network == Network.RegTest)
+			{
+				return new Height(0);
+			}
+			else
+			{
+				throw new NotSupportedException($"{network} is not supported.");
 			}
 		}
 	}
