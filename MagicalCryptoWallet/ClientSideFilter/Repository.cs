@@ -135,11 +135,12 @@ namespace MagicalCryptoWallet.Backend
 		{
 			_index = index;
 			_cache = new Dictionary<uint256, int>();
-			Load();
+			Reload();
 		}
 
-		private void Load()
+		private void Reload()
 		{
+			_cache.Clear();
 			foreach (var i in _index)
 			{
 				_cache.Add(i.Key, i.Offset);
@@ -148,7 +149,9 @@ namespace MagicalCryptoWallet.Backend
 
 		public int Get(uint256 key)
 		{
-			return _cache[key];
+			return _cache.ContainsKey(key) 
+				? _cache[key]
+				: -1;
 		}
 
 		public void Append(uint256 key, int offset)
