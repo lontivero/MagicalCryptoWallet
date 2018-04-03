@@ -33,7 +33,9 @@ namespace MagicalCryptoWallet.Tests
 
 			// Generation of data to be added into the filter
 			var random = new Random();
-			var dataDirectory = new DirectoryInfo(Path.Combine(SharedFixture.DataDir, nameof(CreateStoreTest)));
+			var folderPath = Path.Combine(SharedFixture.DataDir, nameof(CreateStoreTest), $"Filters");
+
+			var dataDirectory = new DirectoryInfo( folderPath );
 			if (dataDirectory.Exists)
 			{
 				foreach (var fileInfo in dataDirectory.GetFiles())
@@ -41,9 +43,13 @@ namespace MagicalCryptoWallet.Tests
 					fileInfo.Delete();
 				}
 			}
+			else
+			{
+				dataDirectory.Create();
+			}
 
 			var blocks = new List<GolombRiceFilter>(blockCount);
-			using (var repo = GcsFilterRepository.Open(Path.Combine(SharedFixture.DataDir, nameof(CreateStoreTest))))
+			using (var repo = FilterRepository.Open(folderPath))
 			{
 				for (var i = 0; i < blockCount; i++)
 				{
@@ -57,11 +63,11 @@ namespace MagicalCryptoWallet.Tests
 
 					var filter = GolombRiceFilter.Build(key, txouts, P);
 					blocks.Add(filter);
-					repo.Put(Hashes.Hash256(filter.Data.ToByteArray()), filter);
+					repo.Append(Hashes.Hash256(filter.Data.ToByteArray()), filter);
 				}
 			}
 
-			using (var repo = GcsFilterRepository.Open(Path.Combine(SharedFixture.DataDir, nameof(CreateStoreTest))))
+			using (var repo = FilterRepository.Open(folderPath))
 			{
 				var blockIndexes = Enumerable.Range(0, blockCount).ToList();
 				blockIndexes.Shuffle();
@@ -71,7 +77,7 @@ namespace MagicalCryptoWallet.Tests
 					var block = blocks[blkIndx];
 					var blockFilter = block;
 					var blockFilterId = Hashes.Hash256(blockFilter.Data.ToByteArray());
-					var savedFilter = repo.Get(blockFilterId);
+					var savedFilter = repo.Get(blockFilterId).First();
 					var savedFilterId = Hashes.Hash256(savedFilter.Data.ToByteArray());
 					Assert.Equal(blockFilterId, savedFilterId);
 				}

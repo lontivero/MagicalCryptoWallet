@@ -21,9 +21,9 @@ namespace MagicalCryptoWallet.Tests
 		public void Test1()
 		{
 			var stream = new MemoryStream();
-			var filterStore = new GcsFilterStore(stream);
-			filterStore.Put(new GolombRiceFilter(new FastBitArray(), 10, 20));
-			filterStore.Put(new GolombRiceFilter(new FastBitArray(), 35, 20));
+			var filterStore = new FilterStore(stream);
+			filterStore.Append(new GolombRiceFilter(new FastBitArray(), 10, 20));
+			filterStore.Append(new GolombRiceFilter(new FastBitArray(), 35, 20));
 
 			stream.Seek(0, SeekOrigin.Begin);
 			var filters = filterStore.ToArray();
