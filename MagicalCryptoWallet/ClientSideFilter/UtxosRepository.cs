@@ -24,24 +24,30 @@ namespace MagicalCryptoWallet.Backend
 
 	public class UtxosRepository : IDisposable
 	{
-		private readonly UtxoStore _store;
-		private readonly CachedIndex _index;
+		private UtxoStore _store;
+		private CachedIndex _index;
+		private Stack<uint256> _checkpoints;
+		private uint256 _lastAddedKey;
+		private int _deletedCount;
 
-		public UtxosRepository(UtxoStore store, CachedIndex index)
+		private UtxosRepository(string folderPath, UtxoStore store, CachedIndex index)
 		{
 			_store = store;
 			_index = index;
+			_checkpoints = new Stack<uint256>();
+			_lastAddedKey = uint256.Zero;
+			_deletedCount = 0;
 		}
 
 		public static UtxosRepository Open(string folderPath)
 		{
 			var dataDirectory = new DirectoryInfo(folderPath);
-			var filterStream = File.Open(Path.Combine(folderPath, "utxos.dat"), FileMode.OpenOrCreate);
-			var indexStream = File.Open(Path.Combine(folderPath,  "utxos.idx"), FileMode.OpenOrCreate);
+			var filterStream =  new FileStream(Path.Combine(folderPath, "utxos.dat"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1024 * 64);
+			var indexStream = new FileStream(Path.Combine(folderPath,  "utxos.idx"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1024 * 64);
 			var utxoStore = new UtxoStore(filterStream);
 			var indexStore = new Index(indexStream);
 			var fastIndexStore = new CachedIndex(indexStore);
-			var repo = new UtxosRepository(utxoStore, fastIndexStore);
+			var repo = new UtxosRepository(folderPath, utxoStore, fastIndexStore);
 			return repo;
 		}
 
@@ -49,11 +55,15 @@ namespace MagicalCryptoWallet.Backend
 		{
 			var key = new uint256( Hashes.SHA256( outpoint.ToBytes()) );
 			var offset = _index.Get(key);
-			var utxo = _store.GetFrom(offset).FirstOrDefault();
-			if(utxo.OutPoint == UtxoData.DeletedUtxo){
-				return Enumerable.Empty<UtxoData>();
+			if(offset >= 0)
+			{
+				var utxo = _store.GetFrom(offset).FirstOrDefault();
+				if(utxo.OutPoint != UtxoData.DeletedUtxo)
+				{
+					return _store.GetFrom(offset);
+				}
 			}
-			return _store.GetFrom(offset);
+			return Enumerable.Empty<UtxoData>();
 		}
 
 		public IEnumerable<UtxoData> Get()
@@ -66,6 +76,7 @@ namespace MagicalCryptoWallet.Backend
 			var pos = _store.Append(data);
 			var key = new uint256( Hashes.SHA256( data.OutPoint.ToBytes()) );
 			_index.Append(key, pos);
+			_lastAddedKey = key;
 		}
 
 		public void Delete(OutPoint outpoint)
