@@ -42,7 +42,7 @@ namespace MagicalCryptoWallet.Backend
 			return _store.GetFrom(offset);
 		}
 
-		public IEnumerable<GolombRiceFilter> Get()
+		public IEnumerable<GolombRiceFilter> GetAll()
 		{
 			return _store.GetFrom(0);
 		}

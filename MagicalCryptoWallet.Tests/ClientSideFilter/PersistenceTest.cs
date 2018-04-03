@@ -122,7 +122,7 @@ namespace MagicalCryptoWallet.Tests
 				repo.Delete(filterKey);
 				Assert.Null(repo.Get(filterKey).FirstOrDefault());
 
-				Assert.Equal(filterCount-1, repo.Get().Count());
+				Assert.Equal(filterCount-1, repo.GetAll().Count());
 			}
 		}
 	}
