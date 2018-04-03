@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using NBitcoin;
 using NBitcoin.Crypto;
+using NBitcoin.DataEncoders;
 
 namespace MagicalCryptoWallet.Backend
 {
@@ -95,6 +96,32 @@ namespace MagicalCryptoWallet.Backend
 		{
 		}
 
+
+#if BINARY
+		protected override GolombRiceFilter Read(StringReader reader)
+		{
+			var line = reader.ReadLine();
+			var parts = line.Split(";");
+			var entryCount =  int.Parse(parts[0]);
+			var bitArrayLen = int.Parse(parts[1]);
+			var data = Encoders.Hex.DecodeData(parts[2]);
+			var bitArray = new FastBitArray(data);
+			bitArray.Length = bitArrayLen;
+			return new GolombRiceFilter (bitArray, entryCount);
+		}
+
+		protected override void Write(StringWriter writer, GolombRiceFilter filter)
+		{
+			var data = Encoders.Hex.EncodeData(filter.Data.ToByteArray());
+			writer.Write(filter.N);
+			writer.Write(";");
+			writer.Write(filter.Data.Length);
+			writer.Write(";");
+			writer.WriteLine(data);
+			writer.Flush();
+		}
+
+#else
 		protected override GolombRiceFilter Read(BinaryReader reader)
 		{
 			var magic = reader.ReadInt16();
@@ -119,6 +146,7 @@ namespace MagicalCryptoWallet.Backend
 			writer.Write(data);
 			writer.Flush();
 		}
+#endif
 
 		public IEnumerable<GolombRiceFilter> GetFrom(int offset)
 		{
