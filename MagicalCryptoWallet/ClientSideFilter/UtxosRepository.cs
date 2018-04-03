@@ -66,7 +66,7 @@ namespace MagicalCryptoWallet.Backend
 			return Enumerable.Empty<UtxoData>();
 		}
 
-		public IEnumerable<UtxoData> Get()
+		public IEnumerable<UtxoData> GetAll()
 		{
 			return _store.GetFrom(0);
 		}
@@ -86,6 +86,68 @@ namespace MagicalCryptoWallet.Backend
 			var utxo = _store.GetFrom(offset).First();
 			var deleted = new UtxoData(UtxoData.DeletedUtxo, utxo.Script);
 			_store.Write(offset, deleted);
+
+			_deletedCount++;
+			Pack();
+		}
+
+		public void Checkpoint()
+		{
+			if(_checkpoints.Count >= 1000){
+				_checkpoints = new Stack<uint256>(_checkpoints.Take(200).Reverse());
+			}
+			_checkpoints.Push(_lastAddedKey);
+			//_store.BaseStream.Flush();
+		}
+
+		public void RevertToCheckpoint()
+		{
+			var key = _checkpoints.Pop();
+			var offset = _index.Get(key);
+			var utxo = _store.GetFrom(offset).Skip(1).First();
+			var keylen = new uint256( Hashes.SHA256( utxo.OutPoint.ToBytes()) );
+			var len = _index.Get(keylen);
+			_store.BaseStream.SetLength(len);
+		}
+
+		public void Pack()
+		{
+			if(_deletedCount < (100 * 1000))
+				return;
+			
+			string copyStoreFilePath, copyIndexFilePath;
+
+			var tempPath = Path.GetTempPath();
+			using(var copy = Open(tempPath))
+			{
+				foreach(var utxo in this.GetAll())
+				{
+					copy.Append(utxo);
+				}
+
+				copyStoreFilePath = Path.Combine(tempPath, "utxos.dat");
+				copyIndexFilePath = Path.Combine(tempPath,  "utxos.idx");
+				
+			}
+
+			var folderPath = Path.GetDirectoryName(((FileStream)_store.BaseStream).Name);
+			var storeFilePath = Path.Combine(folderPath, "utxos.dat");
+			var indexFilePath = Path.Combine(folderPath,  "utxos.idx");
+
+			((IDisposable)_store)?.Dispose();
+			((IDisposable)_index)?.Dispose();
+
+			File.Delete(storeFilePath);
+			File.Delete(indexFilePath);
+			File.Move(copyIndexFilePath, indexFilePath);
+			File.Move(copyStoreFilePath, storeFilePath);
+
+			var filterStream = File.Open(storeFilePath, FileMode.OpenOrCreate);
+			var indexStream = File.Open(indexFilePath, FileMode.OpenOrCreate);
+			_store = new UtxoStore(filterStream);
+			_index = new CachedIndex(new Index(indexStream));
+
+			_deletedCount=0;
 		}
 
 		#region IDisposable Support

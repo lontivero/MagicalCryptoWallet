@@ -12,6 +12,7 @@ namespace MagicalCryptoWallet.Backend
 	public abstract class Store<T> : IEnumerable<T>, IDisposable
 	{
 		private readonly Stream _stream;
+		public Stream BaseStream => _stream;
 
 		protected Store(Stream stream)
 		{
