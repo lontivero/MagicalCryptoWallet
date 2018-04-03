@@ -9,27 +9,13 @@ using NBitcoin;
 namespace MagicalCryptoWallet.Backend
 {
 
-	public interface IKeyValueRandomAccessStore<TKey, TItem>
+	public class GcsFilterRepository : IDisposable
 	{
-		TItem GetFrom(int offset);
-		int Put(TKey key, TItem item);
-	}
-
-	public interface IKeyValueStore<TKey, TItem>
-	{
-		TItem Get(TKey key);
-		void Put(TKey key, TItem item);
-	}
-
-	public class GcsFilterRepository : IKeyValueStore<uint256, GolombRiceFilter>, IDisposable
-	{
-		private readonly IKeyValueRandomAccessStore<uint256, GolombRiceFilter> _store;
-		private readonly IKeyValueStore<uint256, int> _index;
+		private readonly GcsFilterStore _store;
+		private readonly PreloadedFilterIndex _index;
 
 
-		public GcsFilterRepository(
-			IKeyValueRandomAccessStore<uint256, GolombRiceFilter> store, 
-			IKeyValueStore<uint256, int> index)
+		public GcsFilterRepository(GcsFilterStore store, PreloadedFilterIndex index)
 		{
 			_store = store;
 			_index = index;
@@ -38,8 +24,8 @@ namespace MagicalCryptoWallet.Backend
 		public static GcsFilterRepository Open(string folderPath)
 		{
 			var dataDirectory = new DirectoryInfo(folderPath);
-			var filterStream = DirectoryStream.Open(dataDirectory, "filter-????.dat");
-			var indexStream = DirectoryStream.Open(dataDirectory, "index-????.dat");
+			var filterStream = File.Open(Path.Combine(folderPath, "filters.dat"), FileMode.OpenOrCreate);
+			var indexStream = File.Open(Path.Combine(folderPath, "index.dat"), FileMode.OpenOrCreate);
 			var filterStore = new GcsFilterStore(filterStream);
 			var indexStore = new GcsFilterIndex(indexStream);
 			var fastIndexStore = new PreloadedFilterIndex(indexStore);
@@ -157,7 +143,7 @@ namespace MagicalCryptoWallet.Backend
 	}
 
 
-	public class GcsFilterStore : Store<GolombRiceFilter>, IKeyValueRandomAccessStore<uint256, GolombRiceFilter>
+	public class GcsFilterStore : Store<GolombRiceFilter>
 	{
 		private const short MagicSeparatorNumber = 0x4691;
 
@@ -201,7 +187,6 @@ namespace MagicalCryptoWallet.Backend
 			return Put(filter);
 		}
 
-
 		private static int GetArrayLength(int n, int div)
 		{
 			if (n <= 0)
@@ -213,7 +198,7 @@ namespace MagicalCryptoWallet.Backend
 	}
 
 
-	public class GcsFilterIndex : Store<GcsFilterIndexEntry>, IKeyValueStore<uint256, int>
+	public class GcsFilterIndex : Store<GcsFilterIndexEntry>
 	{
 		public GcsFilterIndex(Stream stream)
 			: base(stream)
@@ -244,7 +229,7 @@ namespace MagicalCryptoWallet.Backend
 		}
 	}
 
-	public class PreloadedFilterIndex : IKeyValueStore<uint256, int>, IDisposable
+	public class PreloadedFilterIndex: IDisposable
 	{
 		private readonly GcsFilterIndex _index;
 		private readonly Dictionary<uint256, int> _cache;
