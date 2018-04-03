@@ -83,5 +83,47 @@ namespace MagicalCryptoWallet.Tests
 				}
 			}
 		}
+
+		[Fact]
+		public void DeleteIndexTest()
+		{
+			const byte P = 20;
+			const int filterCount = 100;
+
+			var key = new byte[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+
+			// Generation of data to be added into the filter
+			var random = new Random();
+			var folderPath = Path.Combine(SharedFixture.DataDir, nameof(DeleteIndexTest), $"Filters");
+			var dataDirectory = new DirectoryInfo( folderPath );
+
+			try{
+			dataDirectory.Delete(recursive: true);
+			}catch{}
+			dataDirectory.Create();
+
+			var filters = new List<GolombRiceFilter>(filterCount);
+			using (var repo = FilterRepository.Open(folderPath))
+			{
+				for (var i = 0; i < filterCount; i++)
+				{
+					var size = random.Next(1, 10000);
+					var pushDataBuffer = new byte[size];
+					random.NextBytes(pushDataBuffer);
+
+					var filter = GolombRiceFilter.Build(key, new []{ pushDataBuffer }, P);
+					filters.Add(filter);
+					repo.Append(Hashes.Hash256(filter.Data.ToByteArray()), filter);
+				}
+
+				var filterKey = Hashes.Hash256(filters[1].Data.ToByteArray());
+				Assert.Equal(filters[1].Data.ToByteArray(), repo.Get(filterKey).First().Data.ToByteArray());
+
+				repo.Delete(filterKey);
+				Assert.Null(repo.Get(filterKey).FirstOrDefault());
+
+				Assert.Equal(filterCount-1, repo.Get().Count());
+			}
+		}
 	}
 }
