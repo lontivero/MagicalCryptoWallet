@@ -252,7 +252,7 @@ namespace MagicalCryptoWallet.Tests
 						var expectedHash = await rpc.GetBlockHashAsync(i + 1);
 						var filterModel = FilterModel.FromLine(filters[i], new Height(i));
 						Assert.Equal(expectedHash, filterModel.BlockHash);
-						Assert.Null(filterModel.Filter);
+						Assert.Equal(0, filterModel.Filter.N);
 					}
 				}
 				finally

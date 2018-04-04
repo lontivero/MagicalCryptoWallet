@@ -232,7 +232,7 @@ namespace MagicalCryptoWallet.Tests
 					var filter = filters[i];
 					Assert.Equal(i, filter.BlockHeight.Value);
 					Assert.Equal(expectedHash, filter.BlockHash);
-					Assert.Null(filter.Filter);
+					Assert.Equal(0, filter.Filter.N);
 				}
 			}
 			finally
