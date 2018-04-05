@@ -13,12 +13,10 @@ namespace MagicalCryptoWallet.Backend
 	{
 		private readonly Stream _stream;
 		public Stream BaseStream => _stream;
-
 		protected Store(Stream stream)
 		{
 			_stream = stream;
 		}
-
 		public int Append(T item)
 		{
 			if (item == null)
@@ -32,7 +30,6 @@ namespace MagicalCryptoWallet.Backend
 				return (int)pos;
 			}
 		}
-
 		public void Write(int offset, T item)
 		{
 			if (item == null)
@@ -59,13 +56,12 @@ namespace MagicalCryptoWallet.Backend
 
 		protected abstract T Read(BinaryReader reader);
 
-		protected abstract void Write(BinaryWriter writer, T item);
+		internal abstract void Write(BinaryWriter writer, T item);
 
 		public IEnumerator<T> GetEnumerator()
 		{
 			return Enumerate().GetEnumerator();
 		}
-
 		IEnumerator IEnumerable.GetEnumerator()
 		{
 			return GetEnumerator();
@@ -73,7 +69,6 @@ namespace MagicalCryptoWallet.Backend
 
 		#region IDisposable Support
 		private bool _disposedValue = false; 
-
 		protected virtual void Dispose(bool disposing)
 		{
 			if (!_disposedValue)
@@ -86,14 +81,12 @@ namespace MagicalCryptoWallet.Backend
 				_disposedValue = true;
 			}
 		}
-
 		public void Dispose()
 		{
 			Dispose(true);
 		}
 		#endregion
 	}
-
 
 
 	public class Index : Store<IndexEntry>
@@ -120,10 +113,11 @@ namespace MagicalCryptoWallet.Backend
 			return new IndexEntry(new uint256(key), pos);
 		}
 
-		protected override void Write(BinaryWriter writer, IndexEntry indexEntry)
+		internal override void Write(BinaryWriter writer, IndexEntry indexEntry)
 		{
 			writer.Write(indexEntry.Key.ToBytes(), 0, 32);
 			writer.Write(indexEntry.Offset);
+			writer.Flush();
 		}
 	}
 
@@ -144,7 +138,7 @@ namespace MagicalCryptoWallet.Backend
 			_cache.Clear();
 			foreach (var i in _index)
 			{
-				_cache.Add(i.Key, i.Offset);
+				_cache[i.Key] = i.Offset;
 			}
 		}
 
@@ -163,7 +157,6 @@ namespace MagicalCryptoWallet.Backend
 
 		#region IDisposable Support
 		private bool disposedValue = false;
-
 		protected virtual void Dispose(bool disposing)
 		{
 			if (!disposedValue)
@@ -182,7 +175,6 @@ namespace MagicalCryptoWallet.Backend
 		~CachedIndex() {
 		   Dispose(false);
 		}
-
 		void IDisposable.Dispose()
 		{
 			Dispose(true);
@@ -195,7 +187,6 @@ namespace MagicalCryptoWallet.Backend
 	{
 		public uint256 Key { get; }
 		public int Offset { get; }
-
 		public IndexEntry(uint256 key, int offset)
 		{
 			Key = key;

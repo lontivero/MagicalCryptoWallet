@@ -8,7 +8,7 @@ using NBitcoin;
 using NBitcoin.Crypto;
 using NBitcoin.DataEncoders;
 
-namespace MagicalCryptoWallet.Backend
+namespace MagicalCryptoWallet
 {
 	public class FilterRepository : IDisposable
 	{
@@ -21,11 +21,22 @@ namespace MagicalCryptoWallet.Backend
 			_index = index;
 		}
 
-		public static FilterRepository Open(string folderPath)
+		public static FilterRepository Open(string dataFilePath)
 		{
-			var dataDirectory = new DirectoryInfo(folderPath);
-			var filterStream = File.Open(Path.Combine(folderPath, "filters.dat"), FileMode.OpenOrCreate);
-			var indexStream = File.Open(Path.Combine(folderPath,  "filters.idx"), FileMode.OpenOrCreate);
+			return Open(dataFilePath, FileAccess.ReadWrite);
+		}
+
+		public static FilterRepository Read(string dataFilePath)
+		{
+			return Open(dataFilePath, FileAccess.Read);
+		}
+
+		private static FilterRepository Open(string dataFilePath, FileAccess fileAccess)
+		{
+			var dataFileName = Path.GetFileNameWithoutExtension(dataFilePath);
+			var dataDirectory = Path.GetDirectoryName(dataFilePath);
+			var filterStream = File.Open(Path.Combine(dataDirectory, $"{dataFileName}.dat"), FileMode.OpenOrCreate, fileAccess, FileShare.Read);
+			var indexStream = File.Open(Path.Combine(dataDirectory, $"{dataFileName}.idx"), FileMode.OpenOrCreate, fileAccess, FileShare.Read);
 			var filterStore = new FilterStore(filterStream);
 			var indexStore = new Index(indexStream);
 			var fastIndexStore = new CachedIndex(indexStore);
@@ -57,9 +68,12 @@ namespace MagicalCryptoWallet.Backend
 		public void Delete(uint256 key)
 		{
 			var offset = _index.Get(key);
-			var filter = _store.GetFrom(offset).First();
-			var empty = new GolombRiceFilter(filter.Data, 0, 0);
-			_store.Write(offset, empty);
+			var filter = _store.GetFrom(offset).FirstOrDefault();
+			if(filter != null) // this shouldn't happen
+			{
+				var empty = new GolombRiceFilter(filter.Data, 0, 0);
+				_store.Write(offset, empty);
+			}
 		}
 
 		#region IDisposable Support
@@ -87,6 +101,7 @@ namespace MagicalCryptoWallet.Backend
 		#endregion
 	}
 
+
 	public class FilterStore : Store<GolombRiceFilter>
 	{
 		private const short MagicSeparatorNumber = 0x4691;
@@ -96,32 +111,6 @@ namespace MagicalCryptoWallet.Backend
 		{
 		}
 
-
-#if BINARY
-		protected override GolombRiceFilter Read(StringReader reader)
-		{
-			var line = reader.ReadLine();
-			var parts = line.Split(";");
-			var entryCount =  int.Parse(parts[0]);
-			var bitArrayLen = int.Parse(parts[1]);
-			var data = Encoders.Hex.DecodeData(parts[2]);
-			var bitArray = new FastBitArray(data);
-			bitArray.Length = bitArrayLen;
-			return new GolombRiceFilter (bitArray, entryCount);
-		}
-
-		protected override void Write(StringWriter writer, GolombRiceFilter filter)
-		{
-			var data = Encoders.Hex.EncodeData(filter.Data.ToByteArray());
-			writer.Write(filter.N);
-			writer.Write(";");
-			writer.Write(filter.Data.Length);
-			writer.Write(";");
-			writer.WriteLine(data);
-			writer.Flush();
-		}
-
-#else
 		protected override GolombRiceFilter Read(BinaryReader reader)
 		{
 			var magic = reader.ReadInt16();
@@ -136,7 +125,7 @@ namespace MagicalCryptoWallet.Backend
 			return new GolombRiceFilter (bitArray, entryCount);
 		}
 
-		protected override void Write(BinaryWriter writer, GolombRiceFilter filter)
+		internal override void Write(BinaryWriter writer, GolombRiceFilter filter)
 		{
 			var data = filter.Data.ToByteArray();
 
@@ -146,7 +135,6 @@ namespace MagicalCryptoWallet.Backend
 			writer.Write(data);
 			writer.Flush();
 		}
-#endif
 
 		public IEnumerable<GolombRiceFilter> GetFrom(int offset)
 		{
