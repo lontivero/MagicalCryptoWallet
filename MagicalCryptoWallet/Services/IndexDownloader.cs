@@ -48,7 +48,7 @@ namespace MagicalCryptoWallet.Services
 			}
 			else if (network == Network.RegTest)
 			{
-				return FilterModel.FromLine("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206", GetStartingHeight(network));
+				return FilterModel.FromLine("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206:0:0:", GetStartingHeight(network));
 			}
 			else
 			{
@@ -86,23 +86,26 @@ namespace MagicalCryptoWallet.Services
 				{
 					File.Delete(IndexFilePath); // RegTest is not a global ledger, better to delete it.
 					Index.Add(StartingFilter);
-					File.WriteAllLines(IndexFilePath, Index.Select(x => x.ToLine()));
 				}
 				else
 				{
-					int height = StartingHeight.Value;
-					foreach (var line in File.ReadAllLines(IndexFilePath))
+					using(var filters = FilterRepository.Open(indexDir))
 					{
-						var filter = FilterModel.FromLine(line, new Height(height));
-						height++;
-						Index.Add(filter);
+						int height = StartingHeight.Value;
+						foreach (var filter in filters.GetAll())
+						{
+							Index.Add(new FilterModel{ 
+								Filter = filter, 
+								BlockHeight = new Height(height)}
+							);
+							height++;
+						}
 					}
 				}
 			}
 			else
 			{
 				Index.Add(StartingFilter);
-				File.WriteAllLines(IndexFilePath, Index.Select(x => x.ToLine()));
 			}
 		}
 
@@ -111,6 +114,7 @@ namespace MagicalCryptoWallet.Services
 			Guard.NotNull(nameof(requestInterval), requestInterval);
 			Interlocked.Exchange(ref _running, 1);
 
+			var filtersDb = FilterRepository.Open(IndexFilePath);
 			Task.Run(async () =>
 			{
 				try
@@ -143,17 +147,9 @@ namespace MagicalCryptoWallet.Services
 									{
 										var filterModel = FilterModel.FromLine(filters[i], new Height(bestKnownFilter.BlockHeight.Value + i + 1));
 
+										filtersDb.Append(filterModel.BlockHash, filterModel.Filter);
 										Index.Add(filterModel);
 										OnNewFilter(filterModel);
-									}
-
-									if (filters.Count == 1) // minor optimization
-									{
-										await File.AppendAllLinesAsync(IndexFilePath, new[] { Index.Last().ToLine() });
-									}
-									else
-									{
-										await File.WriteAllLinesAsync(IndexFilePath, Index.Select(x => x.ToLine()));
 									}
 
 									Logger.LogInfo<IndexDownloader>($"Downloaded filters for blocks from {bestKnownFilter.BlockHeight.Value + 1} to {Index.Last().BlockHeight}.");
@@ -169,14 +165,13 @@ namespace MagicalCryptoWallet.Services
 								// 1. Rollback index
 								using (await IndexLock.LockAsync())
 								{
+									var last = Index.Last();
+									filtersDb.Delete(last.BlockHash);
 									Index.RemoveAt(Index.Count - 1);
+									
 								}
 
 								OnReorg(reorgedHash);
-
-								// 2. Serialize Index. (Remove last line.)
-								var lines = File.ReadAllLines(IndexFilePath);
-								File.WriteAllLines(IndexFilePath, lines.Take(lines.Length - 1).ToArray());
 
 								// 3. Skip the last valid block.
 								continue;
