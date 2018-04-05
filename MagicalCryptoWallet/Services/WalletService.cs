@@ -133,7 +133,7 @@ namespace MagicalCryptoWallet.Services
 			using (HandleFiltersLock.Lock())
 			using (WalletBlocksLock.Lock())
 			{
-				if (filterModel.Filter != null && !WalletBlocks.ContainsValue(filterModel.BlockHash))
+				if (filterModel.Filter.N != 0 && !WalletBlocks.ContainsValue(filterModel.BlockHash))
 				{
 					await ProcessFilterModelAsync(filterModel, CancellationToken.None);
 				}
@@ -154,7 +154,7 @@ namespace MagicalCryptoWallet.Services
 				// Go through the filters and que to download the matches.
 				var filters = IndexDownloader.GetFiltersIncluding(IndexDownloader.StartingFilter.BlockHeight);
 
-				foreach (var filterModel in filters.Where(x => x.Filter != null && !WalletBlocks.ContainsValue(x.BlockHash))) // Filter can be null if there is no bech32 tx.
+				foreach (var filterModel in filters.Where(x => x.Filter.N != 0 && !WalletBlocks.ContainsValue(x.BlockHash))) // Filter can be null if there is no bech32 tx.
 				{
 					await ProcessFilterModelAsync(filterModel, cancel);
 				}
@@ -168,7 +168,7 @@ namespace MagicalCryptoWallet.Services
 				return;
 			}
 
-			var matchFound = filterModel.Filter.MatchAny(KeyManager.GetKeys().Select(x => x.GetP2wpkhScript().ToCompressedBytes()), filterModel.FilterKey);
+			var matchFound = filterModel.Filter.MatchAny(KeyManager.GetKeys().Select(x => x.GetP2wpkhScript().ToBytes()), filterModel.FilterKey);
 			if (!matchFound)
 			{
 				return;

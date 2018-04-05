@@ -57,7 +57,7 @@ namespace MagicalCryptoWallet.Services
 				}
 				else
 				{
-					using(var filters = FilterRepository.Open(indexDir))
+					using(var filters = FilterRepository.Open(IndexFilePath))
 					{
 						int height = StartingHeight.Value;
 						foreach (var filter in filters.GetAll())
@@ -92,8 +92,8 @@ namespace MagicalCryptoWallet.Services
 			var indexDir = Path.GetDirectoryName(IndexFilePath);
 			var utxoSetDir = Path.GetDirectoryName(Bech32UtxoSetFilePath);
 
-			var filters = FilterRepository.Open(indexDir);
-			var utxos = UtxosRepository.Open(utxoSetDir);
+			var filters = FilterRepository.Open(IndexFilePath);
+			var utxos = UtxosRepository.Open(Bech32UtxoSetFilePath);
 
 			Task.Run(async () =>
 			{
@@ -197,11 +197,11 @@ namespace MagicalCryptoWallet.Services
 							{
 								Index.Add(filterModel);
 							}
+							utxos.Checkpoint();
 						}
 						catch (Exception ex)
 						{
-							Logger.LogInfo<IndexBuilderService>($"Created filter for block: {height}.");
-							utxos.Checkpoint();
+							Logger.LogError<IndexBuilderService>(ex);
 						}
 					}
 				}

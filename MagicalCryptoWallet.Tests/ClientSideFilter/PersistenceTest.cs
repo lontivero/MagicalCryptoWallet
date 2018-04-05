@@ -85,7 +85,7 @@ namespace MagicalCryptoWallet.Tests
 		}
 
 		[Fact]
-		public void DeleteIndexTest()
+		public async void DeleteIndexTest()
 		{
 			const byte P = 20;
 			const int filterCount = 100;
@@ -94,16 +94,13 @@ namespace MagicalCryptoWallet.Tests
 
 			// Generation of data to be added into the filter
 			var random = new Random();
-			var folderPath = Path.Combine(SharedFixture.DataDir, nameof(DeleteIndexTest), $"Filters");
-			var dataDirectory = new DirectoryInfo( folderPath );
+			var folderPath = Path.Combine(SharedFixture.DataDir, nameof(DeleteIndexTest));
 
-			try{
-			dataDirectory.Delete(recursive: true);
-			}catch{}
-			dataDirectory.Create();
+			await IoHelpers.DeleteRecursivelyWithMagicDustAsync(folderPath);
+			Directory.CreateDirectory(folderPath);
 
 			var filters = new List<GolombRiceFilter>(filterCount);
-			using (var repo = FilterRepository.Open(folderPath))
+			using (var repo = FilterRepository.Open(Path.Combine(folderPath, "filters")))
 			{
 				for (var i = 0; i < filterCount; i++)
 				{
