@@ -7,7 +7,7 @@ using System.Text;
 using NBitcoin;
 using NBitcoin.Crypto;
 
-namespace MagicalCryptoWallet.Backend
+namespace MagicalCryptoWallet
 {
 	public abstract class Store<T> : IEnumerable<T>, IDisposable
 	{
@@ -47,7 +47,7 @@ namespace MagicalCryptoWallet.Backend
 			_stream.Seek(offset, SeekOrigin.Begin);
 			using (var br = new BinaryReader(_stream, new UTF8Encoding(false, false), true))
 			{
-				while (_stream.Position < _stream.Length)
+				while (_stream.Length > 0 && _stream.Position < _stream.Length)
 				{
 					yield return Read(br);
 				}

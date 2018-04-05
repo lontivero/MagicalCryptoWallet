@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using NBitcoin;
 
-namespace MagicalCryptoWallet.Backend
+namespace MagicalCryptoWallet
 {
 	public class BlockFilterBuilder
 	{
